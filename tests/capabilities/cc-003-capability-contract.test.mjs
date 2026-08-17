@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createCapabilityFacade, CapabilityError } from '../../src/container/internal/capabilities/index.mjs';
+import { getCapability } from '../../src/container/public/capabilities.mjs';
 import { inspectSource } from '../../scripts/architecture-rules.mjs';
 
 const manifest = Object.freeze({
@@ -21,16 +22,16 @@ function adapterSet(overrides = {}) {
   };
 }
 
-test('CC-003-AC01 approved declared capability is supplied through public facade', async () => {
+test('CC-003-AC01 approved declared capability is supplied through public typed contract', async () => {
   const facade = createCapabilityFacade({ manifest, adapters: adapterSet() });
-  const progress = facade.get('progress');
+  const progress = getCapability(facade, 'progress');
   assert.equal(progress.version, '1.0');
   assert.deepEqual(await progress.save({ checkpoint: 3 }), { ok: true, payload: { checkpoint: 3 } });
 });
 
 test('CC-003-AC02 undeclared or unapproved capability is denied with normalized error', () => {
   const facade = createCapabilityFacade({ manifest, adapters: adapterSet({ billing: { charge() {} } }) });
-  assert.throws(() => facade.get('billing'), (error) => {
+  assert.throws(() => getCapability(facade, 'billing'), (error) => {
     assert.equal(error instanceof CapabilityError, true);
     assert.equal(error.code, 'CAPABILITY_NOT_DECLARED');
     return true;
@@ -49,7 +50,7 @@ test('CC-003-AC04 adapter failures are normalized and never provide direct-acces
     manifest,
     adapters: adapterSet({ progress: { version: '1.0', save: async () => { throw new Error('db host details'); } } }),
   });
-  await assert.rejects(() => facade.get('progress').save({ checkpoint: 1 }), (error) => {
+  await assert.rejects(() => getCapability(facade, 'progress').save({ checkpoint: 1 }), (error) => {
     assert.equal(error instanceof CapabilityError, true);
     assert.equal(error.code, 'CAPABILITY_OPERATION_FAILED');
     assert.equal(String(error.message).includes('db host details'), false);
