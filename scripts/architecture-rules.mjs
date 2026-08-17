@@ -8,8 +8,13 @@ const RULES = [
   },
   {
     code: 'DIRECT_PLATFORM_DATA_ACCESS',
-    message: 'Learning apps must not instantiate Supabase/database clients or access platform data endpoints directly.',
+    message: 'Learning apps must not instantiate Supabase/database clients or import platform client internals.',
     test: (source) => /@supabase\/supabase-js|createClient\s*\(|\.supabase\.co\b|\/rest\/v1\/|(?:src\/)?platform-client\//.test(source),
+  },
+  {
+    code: 'DIRECT_PLATFORM_PRIVATE_ENDPOINT',
+    message: 'Learning apps must not call Babysteps platform/private endpoints directly; use container capabilities.',
+    test: (source) => /(?:fetch|axios\.(?:get|post|put|patch|delete))\s*\([^\n]*(?:api\.)?babysteps[^\n]*(?:\/internal\/|\/private\/|\/billing(?:\/|['"]))/i.test(source),
   },
   {
     code: 'PLATFORM_AUTHORITY_REIMPLEMENTATION',
