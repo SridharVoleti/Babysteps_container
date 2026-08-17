@@ -1,0 +1,14 @@
+{
+  "name": "@babysteps/consumer-app-container",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "test:architecture": "node --test tests/architecture/*.test.mjs",
+    "check:architecture": "node scripts/check-architecture.mjs apps"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
