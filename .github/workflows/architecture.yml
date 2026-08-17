@@ -31,3 +31,15 @@ jobs:
         run: npm run test:manifest
       - name: Validate all app manifests
         run: npm run check:manifests
+
+  cc-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run CC-003 capability acceptance tests
+        run: npm run test:capabilities
+      - name: Enforce app capability/platform boundaries
+        run: npm run check:architecture
