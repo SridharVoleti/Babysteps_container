@@ -7,6 +7,7 @@
     "test": "node --test",
     "test:architecture": "node --test tests/architecture/*.test.mjs",
     "test:manifest": "node --test tests/manifest/*.test.mjs",
+    "test:capabilities": "node --test tests/capabilities/*.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
