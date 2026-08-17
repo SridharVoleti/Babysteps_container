@@ -19,3 +19,15 @@ jobs:
         run: npm run test:architecture
       - name: Enforce CC-001 app boundaries
         run: npm run check:architecture
+
+  cc-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run CC-002 manifest acceptance tests
+        run: npm run test:manifest
+      - name: Validate all app manifests
+        run: npm run check:manifests

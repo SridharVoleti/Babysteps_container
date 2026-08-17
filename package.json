@@ -6,7 +6,9 @@
   "scripts": {
     "test": "node --test",
     "test:architecture": "node --test tests/architecture/*.test.mjs",
-    "check:architecture": "node scripts/check-architecture.mjs apps"
+    "test:manifest": "node --test tests/manifest/*.test.mjs",
+    "check:architecture": "node scripts/check-architecture.mjs apps",
+    "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
   "engines": {
     "node": ">=20"
