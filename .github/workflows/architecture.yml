@@ -43,3 +43,15 @@ jobs:
         run: npm run test:capabilities
       - name: Enforce app capability/platform boundaries
         run: npm run check:architecture
+
+  cc-004:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run CC-004 extension acceptance tests
+        run: npm run test:extensions
+      - name: Enforce extension boundaries
+        run: npm run check:architecture
