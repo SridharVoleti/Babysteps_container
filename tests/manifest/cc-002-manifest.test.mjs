@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveManifest, validateManifest } from '../../src/container/internal/manifest/index.mjs';
+import { loadAppPackage } from '../../src/container/internal/manifest/load-app-package.mjs';
 
 const base = {
   appId: 'magical-math',
@@ -18,18 +19,28 @@ const options = {
   approvedExtensionPoints: ['activity-renderer']
 };
 
-test('CC-002-AC01 valid minimal manifest resolves defaults and may launch', () => {
-  const result = resolveManifest(base, options);
+test('CC-002-AC01 valid minimal manifest resolves defaults and entry point may load', async () => {
+  let loaded = false;
+  const result = await loadAppPackage('/tmp/app.manifest.json', options, {
+    readText: async () => JSON.stringify(base),
+    loadModule: async () => { loaded = true; return { start: () => true }; }
+  });
   assert.equal(result.ok, true);
+  assert.equal(loaded, true);
   assert.deepEqual(result.manifest.optionalCapabilities, []);
   assert.deepEqual(result.manifest.extensionPoints, []);
   assert.deepEqual(result.manifest.contentConfiguration, {});
 });
 
-test('CC-002-AC02 missing/malformed required field is rejected with MANIFEST_INVALID', () => {
-  const result = validateManifest({ ...base, appId: '' }, options);
+test('CC-002-AC02 missing/malformed required field is rejected before app code', async () => {
+  let loaded = false;
+  const result = await loadAppPackage('/tmp/app.manifest.json', options, {
+    readText: async () => JSON.stringify({ ...base, appId: '' }),
+    loadModule: async () => { loaded = true; return {}; }
+  });
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'MANIFEST_INVALID');
+  assert.equal(loaded, false);
 });
 
 test('CC-002-AC03 unsupported contract is rejected with stable compatibility error', () => {
