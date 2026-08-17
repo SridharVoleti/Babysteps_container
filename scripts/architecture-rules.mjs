@@ -4,7 +4,7 @@ const RULES = [
   {
     code: 'CONTAINER_PRIVATE_IMPORT',
     message: 'Learning apps may import only public Consumer App Container interfaces.',
-    test: (source) => /(?:from\s*|import\s*\()['"][^'"]*(?:src\/container\/internal|container\/internal)[^'"]*['"]/.test(source),
+    test: (source) => /(?:from\s*|import\s*(?:\(|\s))['"][^'"]*(?:src\/container\/internal|container\/internal)[^'"]*['"]/.test(source),
   },
   {
     code: 'DIRECT_PLATFORM_DATA_ACCESS',
