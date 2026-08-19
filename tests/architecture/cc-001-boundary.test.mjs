@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { inspectSource } from '../../scripts/architecture-rules.mjs';
+import { evaluateExtensionNeed } from '../../src/container/internal/extensions/index.mjs';
 
 const clean = "import { defineLearningApp } from '../../src/container/public/index.mjs';\nexport default defineLearningApp({ id: 'demo' });";
 
@@ -27,4 +28,27 @@ test('CC-001-AC04 rejects app-side platform authority decisions', () => {
 test('CC-001 boundary checks do not inspect container-owned implementation as app code', () => {
   const source = "export function decideEntitlement(subscriptionStatus) { return subscriptionStatus === 'active'; }";
   assert.deepEqual(inspectSource('src/container/internal/entitlement.mjs', source), []);
+});
+
+test('CC-001-AC05 an unsupported reusable container need resolves to the approved governance request path, not a private workaround', () => {
+  const reusable = evaluateExtensionNeed({ need: 'shared retry/backoff policy', classification: 'reusable-container-capability' });
+  assert.equal(reusable.approved, false);
+  assert.equal(reusable.action, 'REQUEST_CONTAINER_CAPABILITY_APPROVAL');
+});
+
+test('CC-001-AC05 an app-specific need resolves only to an approved extension mechanism or an approval request, never a fork', () => {
+  const unapproved = evaluateExtensionNeed({ need: 'custom scoring visualization', classification: 'app-specific' });
+  assert.equal(unapproved.approved, false);
+  assert.equal(unapproved.action, 'REQUEST_EXTENSION_POINT_APPROVAL');
+  assert.equal(JSON.stringify(unapproved).toLowerCase().includes('fork'), false);
+});
+
+test('CC-001-AC05 fork/copy/monkey-patch workarounds require reaching container-private modules and are rejected by the architecture gate', () => {
+  const forkAttempt = inspectSource(
+    'apps/demo/forked-core.mjs',
+    "import { createSessionLifecycle } from '../../src/container/internal/session/session-lifecycle.mjs';\n" +
+      "// copied/forked container core to monkey-patch around an unsupported need instead of requesting approval\n" +
+      'createSessionLifecycle.prototype.hack = () => {};'
+  );
+  assert.equal(forkAttempt.some((v) => v.code === 'CONTAINER_PRIVATE_IMPORT'), true);
 });
