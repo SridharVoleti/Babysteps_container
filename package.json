@@ -10,6 +10,7 @@
     "test:capabilities": "node --test tests/capabilities/*.test.mjs",
     "test:extensions": "node --test tests/extensions/*.test.mjs",
     "test:launch-context": "node --test tests/bootstrap/sb-001-authorized-launch-context.test.mjs",
+    "test:runtime-binding": "node --test tests/runtime/sb-002-runtime-context-binding.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },

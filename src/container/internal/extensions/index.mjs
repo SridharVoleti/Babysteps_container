@@ -4,7 +4,7 @@ export class ExtensionError extends Error {
 
 function fail(code, message) { throw new ExtensionError(code, message); }
 
-export function createExtensionManager({ manifest, approvedExtensionContracts = {} }) {
+export function createExtensionManager({ manifest, approvedExtensionContracts = {}, runtimeContext = undefined }) {
   const active = new Map();
   const declared = new Set(manifest?.extensionPoints ?? []);
 
@@ -22,7 +22,11 @@ export function createExtensionManager({ manifest, approvedExtensionContracts = 
       const key = `${extension.type}:${extension.id}`;
       if (active.has(key)) return Object.freeze({ ok: true, alreadyInitialized: true });
       try {
-        const lifecycle = await extension.initialize(Object.freeze({ extensionType: extension.type, contractVersion: extension.version }));
+        const lifecycle = await extension.initialize(Object.freeze({
+          extensionType: extension.type,
+          contractVersion: extension.version,
+          ...(runtimeContext !== undefined ? { runtimeContext } : {}),
+        }));
         active.set(key, Object.freeze({ id: extension.id, type: extension.type, version: extension.version, lifecycle: lifecycle ?? null }));
         return Object.freeze({ ok: true, alreadyInitialized: false });
       } catch {
