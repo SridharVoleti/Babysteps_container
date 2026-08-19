@@ -13,6 +13,7 @@ import {
   createSessionPinnedContentLoader,
   SessionContentBindingError,
 } from '../../src/container/internal/content/session-content-binding.mjs';
+import { CONTENT_VERSION_COMPATIBILITY_REGISTRY } from '../../src/container/internal/governance/content-compatibility-registry.mjs';
 
 const baseClaims = Object.freeze({
   learnerId: 'learner-1', appId: 'magical-math', releaseId: 'release-1', sessionId: 'session-1',
@@ -21,6 +22,11 @@ const baseClaims = Object.freeze({
 const proof = (claims) => createHash('sha256').update(JSON.stringify(claims)).digest('hex');
 const envelope = (claims) => ({ claims: structuredClone(claims), proof: proof(claims) });
 const verifier = async (ctx) => ({ ok: ctx?.proof === proof(ctx?.claims ?? {}), claims: ctx?.claims });
+
+// The resolved CC-002 manifest for the authorized app/release - the only trusted source of
+// the approved content version for a session.
+const manifestV12 = Object.freeze({ appId: 'magical-math', contentVersion: 'v12' });
+const manifestV13 = Object.freeze({ appId: 'magical-math', contentVersion: 'v13' });
 
 async function boundRuntime(claims = baseClaims) {
   const opts = {
@@ -45,7 +51,7 @@ test('CR-002-AC01 a session that starts with approved content version v12 is pin
   const binding = await boundRuntime();
   const callLog = [];
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: versionedLoader(callLog) });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   const content = await loader.resolve();
@@ -57,7 +63,7 @@ test('CR-002-AC02 a newer content version deployed while a v12 session is active
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-2' });
   const callLog = [];
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: versionedLoader(callLog) });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   await loader.resolve();
@@ -69,9 +75,9 @@ test('CR-002-AC02 a newer content version deployed while a v12 session is active
 
 test('CR-002-AC03 the same pinned content version is used after a rerender/refresh of the same authorized session', async () => {
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-3' });
-  const first = pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
-  // Rerender re-invokes the same session-init pinning call with the same version; must be idempotent.
-  const second = pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  const first = pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
+  // Rerender re-invokes the same session-init pinning call with the same manifest; must be idempotent.
+  const second = pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   assert.equal(first, second);
   assert.equal(getSessionContentBinding(binding).contentVersion, 'v12');
 });
@@ -80,7 +86,7 @@ test('CR-002-AC04 connectivity loss and restoration does not re-resolve the sess
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-4' });
   const callLog = [];
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: versionedLoader(callLog) });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   await loader.resolve(); // before disconnect
@@ -89,35 +95,41 @@ test('CR-002-AC04 connectivity loss and restoration does not re-resolve the sess
   assert.equal(callLog.filter((v) => v !== 'v12').length, 0);
 });
 
-test('CR-002-AC05 an authorized resume restores the same content version unless an explicit compatibility mapping applies', async () => {
+test('CR-002-AC05 an authorized resume restores the approved content version unless a trusted governance mapping applies, and a forged caller mapping cannot substitute', async () => {
   const bindingA = await boundRuntime({ ...baseClaims, sessionId: 'session-5a' });
-  pinSessionContentVersion({ runtimeBinding: bindingA, contentVersion: 'v12' });
-  const restored = restoreSessionContentBinding({ runtimeBinding: bindingA, resumedContentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: bindingA, manifest: manifestV12 });
+  const restored = restoreSessionContentBinding({ runtimeBinding: bindingA, manifest: manifestV12, resumedContentVersion: 'v12' });
   assert.equal(restored.contentVersion, 'v12');
 
+  // An incompatible resume for an already-pinned session is rejected.
   assert.throws(
-    () => restoreSessionContentBinding({ runtimeBinding: bindingA, resumedContentVersion: 'v13' }),
+    () => restoreSessionContentBinding({ runtimeBinding: bindingA, manifest: manifestV12, resumedContentVersion: 'v13' }),
     (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_RESUME_VERSION_MISMATCH'
   );
 
-  const mapped = restoreSessionContentBinding({
-    runtimeBinding: bindingA,
-    resumedContentVersion: 'v13',
-    compatibilityMap: () => 'v12',
-  });
-  assert.equal(mapped.contentVersion, 'v12');
-
-  // A brand new runtime (e.g. after a real page refresh where a fresh binding is issued) restores fresh.
+  // A brand new runtime (e.g. after a real page refresh where a fresh binding is issued)
+  // resuming an unapproved prior version fails safely - no caller-supplied mapping function
+  // exists any more to grant compatibility.
   const bindingB = await boundRuntime({ ...baseClaims, sessionId: 'session-5b' });
-  const freshRestore = restoreSessionContentBinding({ runtimeBinding: bindingB, resumedContentVersion: 'v9' });
-  assert.equal(freshRestore.contentVersion, 'v9');
+  assert.throws(
+    () => restoreSessionContentBinding({ runtimeBinding: bindingB, manifest: manifestV12, resumedContentVersion: 'v9' }),
+    (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_RESUME_VERSION_MISMATCH'
+  );
+
+  // Only a mapping already recorded in the trusted, version-controlled compatibility
+  // registry can let a fresh session resume into a different (but currently approved)
+  // content version.
+  assert.equal(CONTENT_VERSION_COMPATIBILITY_REGISTRY['magical-math'].v11.compatibleWith, 'v12');
+  const bindingC = await boundRuntime({ ...baseClaims, sessionId: 'session-5c' });
+  const migrated = restoreSessionContentBinding({ runtimeBinding: bindingC, manifest: manifestV12, resumedContentVersion: 'v11' });
+  assert.equal(migrated.contentVersion, 'v12');
 });
 
 test('CR-002-AC06 app-specific code requesting a different content version mid-session is rejected; the pinned version remains authoritative', async () => {
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-6' });
   const callLog = [];
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: versionedLoader(callLog) });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   await assert.rejects(
@@ -131,7 +143,7 @@ test('CR-002-AC06 app-specific code requesting a different content version mid-s
 test('CR-002-AC07 an unavailable pinned content version fails safely rather than substituting another version', async () => {
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-7' });
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: async () => null });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   await assert.rejects(
@@ -144,7 +156,7 @@ test('CR-002-AC08 only the cache entry matching the exact session binding is eve
   const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-8' });
   const callLog = [];
   const contentRuntime = createContentRuntime({ runtimeBinding: binding, loader: versionedLoader(callLog) });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12' });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12 });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime });
 
   await loader.resolve();
@@ -156,7 +168,7 @@ test('CR-002-AC08 only the cache entry matching the exact session binding is eve
 
 test('CR-002-AC09 a newly authorized session begun after v13 is approved may use v13', async () => {
   const newerBinding = await boundRuntime({ ...baseClaims, sessionId: 'session-9' });
-  const pinned = pinSessionContentVersion({ runtimeBinding: newerBinding, contentVersion: 'v13' });
+  const pinned = pinSessionContentVersion({ runtimeBinding: newerBinding, manifest: manifestV13 });
   assert.equal(pinned.contentVersion, 'v13');
 });
 
@@ -173,7 +185,7 @@ test('CR-002-AC11 content-version telemetry contains only safe technical metadat
     runtimeBinding: binding,
     loader: async ({ contentVersion }) => ({ contentVersion, lessons: [{ text: 'sensitive lesson text' }] }),
   });
-  pinSessionContentVersion({ runtimeBinding: binding, contentVersion: 'v12', onTelemetry: (e) => events.push(e) });
+  pinSessionContentVersion({ runtimeBinding: binding, manifest: manifestV12, onTelemetry: (e) => events.push(e) });
   const loader = createSessionPinnedContentLoader({ runtimeBinding: binding, contentRuntime, onTelemetry: (e) => events.push(e) });
   await loader.resolve();
   await loader.resolve({ contentVersion: 'v99' }).catch(() => {});
@@ -186,8 +198,31 @@ test('CR-002-AC11 content-version telemetry contains only safe technical metadat
   }
 });
 
+test('CR-002-P0 the initial session content pin cannot be chosen by caller input independent of the resolved manifest', async () => {
+  const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-13' });
+  // No `contentVersion` parameter exists any more - only the resolved manifest can supply it.
+  assert.throws(
+    () => pinSessionContentVersion({ runtimeBinding: binding, manifest: null }),
+    (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_VERSION_REQUIRED'
+  );
+  assert.throws(
+    () => pinSessionContentVersion({ runtimeBinding: binding, manifest: { appId: 'chess-master', contentVersion: 'v1' } }),
+    (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_VERSION_REQUIRED'
+  );
+  assert.throws(
+    () => pinSessionContentVersion({ runtimeBinding: binding, manifest: { appId: 'magical-math' } }),
+    (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_VERSION_REQUIRED'
+  );
+});
+
 test('CR-002 invalid input is rejected', async () => {
-  const binding = await boundRuntime({ ...baseClaims, sessionId: 'session-12' });
-  assert.throws(() => pinSessionContentVersion({ runtimeBinding: binding, contentVersion: '' }), (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_VERSION_REQUIRED');
-  assert.throws(() => getSessionContentBinding(binding), (e) => e.code === 'CONTENT_VERSION_REQUIRED');
+  const unpinned = await boundRuntime({ ...baseClaims, sessionId: 'session-12' });
+  assert.throws(() => getSessionContentBinding(unpinned), (e) => e.code === 'CONTENT_VERSION_REQUIRED');
+
+  const rePin = await boundRuntime({ ...baseClaims, sessionId: 'session-12b' });
+  pinSessionContentVersion({ runtimeBinding: rePin, manifest: manifestV12 });
+  assert.throws(
+    () => pinSessionContentVersion({ runtimeBinding: rePin, manifest: manifestV13 }),
+    (e) => e instanceof SessionContentBindingError && e.code === 'CONTENT_VERSION_MISMATCH'
+  );
 });
