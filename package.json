@@ -44,6 +44,7 @@
     "test:narration-voice": "node --test tests/media/am-002-narration-voice-provider.test.mjs",
     "test:speech-input": "node --test tests/media/am-003-speech-input-runtime.test.mjs",
     "test:capability-service": "node --test tests/runtime/dr-001-capability-service.test.mjs",
+    "test:responsive-runtime": "node --test tests/runtime/dr-002-responsive-runtime.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
