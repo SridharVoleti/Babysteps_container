@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
 
 export class LocalOwnershipError extends Error {
@@ -13,11 +12,26 @@ export class LocalOwnershipError extends Error {
 
 function fail(code, message, metadata) { throw new LocalOwnershipError(code, message, metadata); }
 
+// A fast, synchronous, browser-native string hash (FNV-1a) - not a cryptographic hash, and
+// deliberately so: this key is only a local coordination/telemetry namespace, never a
+// security boundary, so it avoids depending on any async-only (WebCrypto) or Node-only
+// (node:crypto) primitive purely to stay synchronous at coordinator construction (DR-001).
+function fnv1a(text, seed) {
+  let hash = seed;
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return (hash >>> 0).toString(16).padStart(8, '0');
+}
+
+const HASH_SEEDS = Object.freeze([0x811c9dc5, 0x9e3779b9, 0x27d4eb2f, 0x165667b1]);
+
 // Derived/hashed rather than the raw learner/app/release/session fingerprint, so local
 // coordination (and its telemetry) never leaks a raw learner identifier across tabs/origins.
 function ownershipKeyOf(identity) {
   const fingerprint = `${identity.learnerId}::${identity.appId}::${identity.releaseId}::${identity.sessionId}`;
-  return createHash('sha256').update(fingerprint).digest('hex').slice(0, 32);
+  return HASH_SEEDS.map((seed) => fnv1a(fingerprint, seed)).join('');
 }
 
 async function tryAdapter(adapter, key) {
@@ -29,10 +43,103 @@ async function tryAdapter(adapter, key) {
   }
 }
 
+function randomOwnerId() {
+  return (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// DR-003 preferred primitive: the Web Locks API (navigator.locks) is a genuine same-origin
+// cross-tab/cross-context mutex provided by the browser itself - not process/module memory.
+// A Web Locks request only holds the lock for the lifetime of its callback, so this adapter
+// keeps the callback pending (via an internally-resolvable promise) until release() is
+// called, translating that into the acquire()/release() shape this coordinator expects.
+// Returns null (unavailable) when Web Locks is not supported, so callers fall back safely.
+export function createWebLocksAdapter({ locks = (typeof navigator !== 'undefined' ? navigator.locks : undefined) } = {}) {
+  if (!locks || typeof locks.request !== 'function') return null;
+
+  return async function acquire(key) {
+    let settleAcquired;
+    let releaseHold;
+    const acquired = new Promise((resolve) => { settleAcquired = resolve; });
+    const held = new Promise((resolve) => { releaseHold = resolve; });
+
+    const requestOutcome = locks.request(key, { ifAvailable: true }, async (lock) => {
+      if (!lock) {
+        settleAcquired(false);
+        return;
+      }
+      settleAcquired(true);
+      await held;
+    }).catch(() => { settleAcquired(false); });
+
+    const gotLock = await acquired;
+    if (!gotLock) {
+      releaseHold();
+      await requestOutcome.catch(() => {});
+      return null;
+    }
+    return { release: () => releaseHold() };
+  };
+}
+
+const BROADCAST_CLAIM_WINDOW_MS = 60;
+const BROADCAST_CHANNEL_PREFIX = 'babysteps-dr003-lock::';
+
+// DR-003 fallback primitive: when Web Locks is unsupported, coordinates via BroadcastChannel
+// - a genuine same-origin cross-tab/cross-context browser message bus (also available as a
+// built-in in Node), not process/module memory. Independent adapter instances (representing
+// independent tabs) elect exactly one claimant per key using a short claim-broadcast window
+// with a deterministic tie-break, then the holder answers later claim/query broadcasts with
+// "held" until it releases. Returns null (unavailable) when BroadcastChannel doesn't exist.
+export function createBroadcastLockAdapter({ ChannelImpl = (typeof BroadcastChannel !== 'undefined' ? BroadcastChannel : undefined), windowMs = BROADCAST_CLAIM_WINDOW_MS } = {}) {
+  if (typeof ChannelImpl !== 'function') return null;
+  const ownerId = randomOwnerId();
+
+  return async function acquire(key) {
+    const channel = new ChannelImpl(`${BROADCAST_CHANNEL_PREFIX}${key}`);
+    const claimId = `${ownerId}:${Math.random().toString(36).slice(2)}`;
+    const seenClaims = new Set([claimId]);
+    let heldByOther = false;
+
+    const claimListener = (event) => {
+      const msg = event?.data;
+      if (!msg || typeof msg !== 'object') return;
+      if (msg.type === 'held') heldByOther = true;
+      if (msg.type === 'claim' && typeof msg.claimId === 'string') seenClaims.add(msg.claimId);
+    };
+    channel.addEventListener('message', claimListener);
+    channel.postMessage({ type: 'claim', claimId });
+    await new Promise((resolve) => setTimeout(resolve, windowMs));
+    channel.removeEventListener('message', claimListener);
+
+    if (heldByOther || [...seenClaims].sort()[0] !== claimId) {
+      channel.close();
+      return null;
+    }
+
+    const holderListener = (event) => {
+      const msg = event?.data;
+      if (msg && (msg.type === 'claim' || msg.type === 'query')) channel.postMessage({ type: 'held', ownerId });
+    };
+    channel.addEventListener('message', holderListener);
+
+    return {
+      release: () => {
+        channel.removeEventListener('message', holderListener);
+        channel.close();
+      },
+    };
+  };
+}
+
 // DR-003: coordinates exactly one active local browser/runtime owner per exact authorized
 // session. This module owns ONLY same-origin local coordination - it never decides platform
 // session validity/resume authority (that stays with SB-002/SR-005), and it introduces no
 // server heartbeat: ownership is acquired/released through the injected lock primitive only.
+// By default (no explicit adapters supplied) it uses the real preferred/fallback browser
+// primitives above rather than an in-memory adapter, so two independent real tabs/contexts
+// genuinely exclude each other.
 export function createLocalOwnershipCoordinator({
   runtimeBinding,
   lockAdapter,
@@ -41,6 +148,16 @@ export function createLocalOwnershipCoordinator({
 }) {
   const identity = getRuntimeContext(runtimeBinding);
   const key = ownershipKeyOf(identity);
+
+  // Real production defaults are only wired in when the caller configures neither tier at
+  // all - a caller that explicitly supplies one tier (e.g. a test double simulating a
+  // specific primitive) keeps exactly what it asked for rather than silently gaining an
+  // unrequested real fallback underneath it.
+  const usingDefaultAdapters = lockAdapter === undefined && fallbackLockAdapter === undefined;
+  if (usingDefaultAdapters) {
+    lockAdapter = createWebLocksAdapter();
+    fallbackLockAdapter = createBroadcastLockAdapter();
+  }
 
   let state = 'NON_OWNING';
   let lease = null;
@@ -144,9 +261,13 @@ export function createLocalOwnershipCoordinator({
   });
 }
 
-// A minimal in-memory lock adapter usable as a fallback coordination mechanism (equivalent
-// to a same-origin BroadcastChannel/local-storage lease) when the preferred browser Web
-// Locks primitive is unavailable. Keyed exactly like the coordinator above.
+// A minimal in-memory lock adapter. This is process/module memory only - it does NOT
+// coordinate across real independent browser tabs/contexts (each has its own JS realm) and
+// must never be relied on as the production default. It exists for unit tests that want to
+// exercise the coordinator's own acquire/release/guard logic without depending on
+// Web Locks/BroadcastChannel availability; DR-003 cross-tab guarantees are provided by
+// createWebLocksAdapter()/createBroadcastLockAdapter() above, which back the coordinator's
+// actual defaults.
 export function createInMemoryLockAdapter() {
   const held = new Set();
   return async function acquire(key) {
