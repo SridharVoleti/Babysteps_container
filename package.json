@@ -16,6 +16,7 @@
     "test:auth-context": "node --test tests/api/api-002-authenticated-request-context.test.mjs",
     "test:contract-validation": "node --test tests/api/api-003-contract-validation.test.mjs",
     "test:session-runtime": "node --test tests/session/sr-001-session-runtime.test.mjs",
+    "test:session-lifecycle": "node --test tests/session/sr-002-session-lifecycle.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
