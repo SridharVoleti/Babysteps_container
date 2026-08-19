@@ -1,4 +1,4 @@
-import { isApprovedExtensionType, isSupportedExtensionVersion } from '../governance/extension-registry.mjs';
+import { isApprovedExtensionType, isSupportedExtensionVersion, isTrustedGovernanceDecision } from '../governance/extension-registry.mjs';
 
 export class ExtensionError extends Error {
   constructor(code, message) { super(message); this.name = 'ExtensionError'; this.code = code; Object.freeze(this); }
@@ -77,12 +77,18 @@ export async function registerApprovedExtension(manager, { type, version, module
   return manager.register(extension);
 }
 
+// approval.approvedBy/decisionId are request metadata only, never a source of authority:
+// a caller/app cannot self-assert approval. The decisionId must already exist in the
+// container-owned governance registry, tied to the classification it was actually
+// granted for; forged or mismatched decision references resolve as unapproved.
 export function evaluateExtensionNeed({ need, classification, approval } = {}) {
   if (!need || !['app-specific', 'reusable-container-capability'].includes(classification)) {
     return Object.freeze({ approved: false, action: 'CLASSIFY_NEED' });
   }
-  if (!approval?.approvedBy || !approval?.decisionId) {
-    return Object.freeze({ approved: false, action: classification === 'app-specific' ? 'REQUEST_EXTENSION_POINT_APPROVAL' : 'REQUEST_CONTAINER_CAPABILITY_APPROVAL' });
+  const deniedAction = classification === 'app-specific' ? 'REQUEST_EXTENSION_POINT_APPROVAL' : 'REQUEST_CONTAINER_CAPABILITY_APPROVAL';
+  const decisionId = approval?.decisionId;
+  if (!decisionId || !isTrustedGovernanceDecision(decisionId, classification)) {
+    return Object.freeze({ approved: false, action: deniedAction });
   }
-  return Object.freeze({ approved: true, action: classification === 'app-specific' ? 'ADD_APPROVED_EXTENSION_POINT' : 'ADD_APPROVED_CONTAINER_CAPABILITY', decisionId: approval.decisionId });
+  return Object.freeze({ approved: true, action: classification === 'app-specific' ? 'ADD_APPROVED_EXTENSION_POINT' : 'ADD_APPROVED_CONTAINER_CAPABILITY', decisionId });
 }

@@ -82,6 +82,48 @@ test('CC-004-AC07 unsupported need requires explicit governance approval and nev
   assert.equal(denied.approved, false);
   assert.equal(denied.action, 'REQUEST_EXTENSION_POINT_APPROVAL');
   assert.equal(JSON.stringify(denied).toLowerCase().includes('fork'), false);
-  const approvedNeed = evaluateExtensionNeed({ need: 'new visualization', classification: 'app-specific', approval: { approvedBy: 'architecture-board', decisionId: 'EXT-001' } });
+
+  const approvedNeed = evaluateExtensionNeed({
+    need: 'activity renderer extension point',
+    classification: 'app-specific',
+    approval: { approvedBy: 'container-governance-board', decisionId: 'GOV-CC004-ACTIVITY-RENDERER-001' },
+  });
   assert.equal(approvedNeed.approved, true);
+  assert.equal(approvedNeed.action, 'ADD_APPROVED_EXTENSION_POINT');
+});
+
+test('CC-004-AC13 caller-supplied approvedBy/decisionId cannot grant approval by themselves', () => {
+  const forgedDecisionId = evaluateExtensionNeed({
+    need: 'new visualization',
+    classification: 'app-specific',
+    approval: { approvedBy: 'container-governance-board', decisionId: 'FORGED-DECISION-999' },
+  });
+  assert.equal(forgedDecisionId.approved, false);
+  assert.equal(forgedDecisionId.action, 'REQUEST_EXTENSION_POINT_APPROVAL');
+
+  // approvedBy claims the trusted authority's name, but the decisionId itself is fabricated.
+  const impersonatedApprover = evaluateExtensionNeed({
+    need: 'new visualization',
+    classification: 'app-specific',
+    approval: { approvedBy: 'container-governance-board', decisionId: 'not-a-real-decision' },
+  });
+  assert.equal(impersonatedApprover.approved, false);
+});
+
+test('CC-004-AC13 a real trusted decision cannot be reused to approve a different classification than it was granted for', () => {
+  const wrongClassification = evaluateExtensionNeed({
+    need: 'shared retry policy',
+    classification: 'reusable-container-capability',
+    approval: { approvedBy: 'container-governance-board', decisionId: 'GOV-CC004-ACTIVITY-RENDERER-001' },
+  });
+  assert.equal(wrongClassification.approved, false);
+  assert.equal(wrongClassification.action, 'REQUEST_CONTAINER_CAPABILITY_APPROVAL');
+});
+
+test('CC-004-AC13 the authoritative registry cannot be mutated at runtime, by an unapproved request or otherwise', () => {
+  assert.equal(Object.isFrozen(EXTENSION_CONTRACT_REGISTRY), true);
+  const before = Object.keys(EXTENSION_CONTRACT_REGISTRY).length;
+  evaluateExtensionNeed({ need: 'x', classification: 'app-specific', approval: { approvedBy: 'attacker', decisionId: 'FAKE' } });
+  assert.throws(() => { EXTENSION_CONTRACT_REGISTRY['attacker-type'] = { supportedVersions: ['1.0'] }; }, TypeError);
+  assert.equal(Object.keys(EXTENSION_CONTRACT_REGISTRY).length, before);
 });
