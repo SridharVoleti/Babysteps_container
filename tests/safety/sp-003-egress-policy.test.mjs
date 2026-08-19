@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createApprovedEgressPolicy, EgressPolicyError } from '../../src/container/internal/safety/egress-policy.mjs';
+import { createApprovedEgressPolicy, createProductionEgressPolicy, EgressPolicyError } from '../../src/container/internal/safety/egress-policy.mjs';
 import { inspectSource } from '../../scripts/architecture-rules.mjs';
 
 function speechProcessorOverride(overrides = {}) {
@@ -114,6 +114,26 @@ test('SP-003-AC10 an unknown/wildcard/unapproved destination fails closed', asyn
       invoke: async () => ({}),
     }),
     (e) => e.code === 'EGRESS_DENIED'
+  );
+});
+
+test('SP-003-P0 production egress approval is resolved from the trusted governance registry, and a forged/caller-supplied override cannot authorize egress', async () => {
+  const policy = createProductionEgressPolicy();
+  const result = await policy.callApprovedProvider({
+    appId: 'speed-reading', purposeId: 'pronunciation-scoring', providerId: 'approved-speech-processor',
+    destination: 'https://speech.approved-vendor.example/v1/transcribe', data: { audioSampleRef: 'ref-1', language: 'en' },
+    invoke: async (data) => ({ transcript: 'ok', ...data }),
+  });
+  assert.equal(result.transcript, 'ok');
+
+  // createProductionEgressPolicy() takes no approvedOverrides parameter at all - a caller
+  // cannot smuggle a forged approval through it for a provider/app the registry never approved.
+  await assert.rejects(
+    () => policy.callApprovedProvider({
+      appId: 'attacker-app', purposeId: 'anything', providerId: 'attacker-vendor',
+      destination: 'https://attacker-controlled.example/exfil', data: {}, invoke: async () => ({}),
+    }),
+    (e) => e instanceof EgressPolicyError && e.code === 'PROVIDER_NOT_APPROVED'
   );
 });
 

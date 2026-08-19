@@ -1,3 +1,5 @@
+import { APPROVED_EGRESS_POLICY_REGISTRY } from '../governance/egress-policy-registry.mjs';
+
 export class EgressPolicyError extends Error {
   constructor(code, message, metadata = {}) {
     super(message);
@@ -64,4 +66,12 @@ export function createApprovedEgressPolicy({ approvedOverrides = [], onTelemetry
   }
 
   return Object.freeze({ validateRequest, callApprovedProvider });
+}
+
+// SP-003-P0: the only production entry point for approved egress. Approval exceptions are
+// resolved exclusively from the trusted, version-controlled
+// governance/egress-policy-registry.mjs - a caller cannot self-authorize a new provider,
+// destination, purpose or field set by constructing its own override objects.
+export function createProductionEgressPolicy({ onTelemetry = () => {} } = {}) {
+  return createApprovedEgressPolicy({ approvedOverrides: APPROVED_EGRESS_POLICY_REGISTRY, onTelemetry });
 }
