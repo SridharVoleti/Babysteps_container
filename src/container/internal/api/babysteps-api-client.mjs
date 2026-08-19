@@ -91,13 +91,22 @@ export function createBabystepsApiClient({
     for (const field of AUTHORITY_FIELDS) delete body[field];
     for (const field of authorityFields) body[field] = scoped[field];
 
+    // ER-002/PA-003: X-Request-Id identifies this exact HTTP attempt (always fresh, purely
+    // for tracing). The Idempotency-Key header is the platform's retry identity and must
+    // stay the same across every attempt/retry/recovery of the same logical checkpoint - so
+    // when the caller (e.g. PA-003's recovery adapter) supplies a stable logical
+    // idempotencyKey on the payload, that value becomes the transport header verbatim
+    // instead of a fresh UUID being generated per call.
     const requestId = randomUUID();
+    const logicalIdempotencyKey = typeof payload.idempotencyKey === 'string' && payload.idempotencyKey.trim() !== ''
+      ? payload.idempotencyKey
+      : requestId;
     const headers = {
       'X-Babysteps-Contract-Version': contractVersion,
       'X-Request-Id': requestId,
       'X-Correlation-Id': identity.correlationId,
       Authorization: `Bearer ${await authProvider()}`,
-      ...(operation.idempotent ? { 'Idempotency-Key': requestId } : {}),
+      ...(operation.idempotent ? { 'Idempotency-Key': logicalIdempotencyKey } : {}),
     };
 
     const requestEnvelope = Object.freeze({
