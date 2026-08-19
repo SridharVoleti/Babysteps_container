@@ -1,3 +1,5 @@
+import { isApprovedDegradedCapability } from '../governance/degraded-capability-policy-registry.mjs';
+
 export class RuntimeCapabilityError extends Error {
   constructor(code, message, metadata = {}) {
     super(message);
@@ -29,6 +31,10 @@ export function createRuntimeCapabilityService({
 }) {
   const required = Object.freeze([...new Set([BASELINE_REQUIRED_CAPABILITY, ...requiredCapabilities])]);
   const optional = Object.freeze([...new Set(optionalCapabilities)]);
+  // SB-003/DR-001-P1: a caller can request that a capability be treated as degradable, but
+  // that request only takes effect for capabilities the trusted governance registry has
+  // already approved - a forged/unregistered name cannot grant its own approval.
+  const trustedApprovedDegraded = Object.freeze([...new Set(approvedDegradedCapabilities)].filter(isApprovedDegradedCapability));
   let evaluation = null;
 
   function emit(event, extra = {}) {
@@ -67,7 +73,7 @@ export function createRuntimeCapabilityService({
 
     const missingRequired = required.filter((name) => results.get(name)?.status !== 'AVAILABLE');
     const degradedOptional = optional.filter((name) => results.get(name)?.status !== 'AVAILABLE');
-    const unapprovedDegraded = degradedOptional.filter((name) => !approvedDegradedCapabilities.includes(name));
+    const unapprovedDegraded = degradedOptional.filter((name) => !trustedApprovedDegraded.includes(name));
 
     evaluation = Object.freeze({
       results,

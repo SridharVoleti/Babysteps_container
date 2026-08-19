@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { APPROVED_CAPABILITIES, createCapabilityFacade } from '../capabilities/index.mjs';
+import { isApprovedDegradedCapability } from '../governance/degraded-capability-policy-registry.mjs';
 import { resolveManifest } from '../manifest/index.mjs';
 import { loadAppPackage } from '../manifest/load-app-package.mjs';
 import { validateLaunchContext, LaunchContextError } from './launch-context.mjs';
@@ -96,7 +97,10 @@ export async function runAtomicBootstrap({
   const degradedCapabilities = [];
   for (const name of manifest.optionalCapabilities) {
     if (facade.has(name)) continue;
-    if (name in approvedFallbacks) {
+    // SB-003/DR-001-P1: a caller-supplied fallback entry is only honored when the trusted
+    // governance registry has also approved that capability for degradation - a caller
+    // cannot grant its own degraded-capability approval by naming an unregistered one.
+    if (name in approvedFallbacks && isApprovedDegradedCapability(name)) {
       degradedCapabilities.push(name);
       continue;
     }

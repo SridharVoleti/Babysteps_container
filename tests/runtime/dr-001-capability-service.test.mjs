@@ -52,6 +52,15 @@ test('DR-001-AC04 an unavailable optional capability continues only with an expl
   assert.deepEqual(result.degradedCapabilities, ['local-recovery-storage']);
 });
 
+test('DR-001-P1 a caller-supplied approvedDegradedCapabilities name that is not in the trusted governance registry still blocks READY', async () => {
+  const service = createRuntimeCapabilityService({
+    probes: { [BASELINE_REQUIRED_CAPABILITY]: available, 'forged-unregistered-capability': unavailable },
+    optionalCapabilities: ['forged-unregistered-capability'],
+    approvedDegradedCapabilities: ['forged-unregistered-capability'],
+  });
+  await assert.rejects(() => service.ready(), (e) => e.code === 'OPTIONAL_CAPABILITY_DEGRADED');
+});
+
 test('DR-001-AC05 app-specific code cannot implement its own browser-name based capability decision', () => {
   const violation = inspectSource('apps/demo/support.mjs', "if (navigator.userAgent.includes('Edge')) { enableFeature(); }");
   assert.ok(violation.some((v) => v.code === 'BROWSER_DETECTION_BYPASS'));

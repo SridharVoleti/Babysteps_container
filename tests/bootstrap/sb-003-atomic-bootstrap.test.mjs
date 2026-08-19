@@ -106,6 +106,22 @@ test('SB-003-AC07 unavailable optional capability with no approved fallback fail
   assert.equal(executed, false);
 });
 
+test('SB-003-P1 a caller-supplied fallback for a capability the governance registry has not approved still blocks READY', async () => {
+  // "narration" is an approved manifest capability (CC-002) so it survives manifest
+  // resolution as a real optional capability, but it is not in the trusted
+  // degraded-capability governance registry - a caller-supplied fallback for it must not
+  // be able to grant its own degradation approval.
+  let executed = false;
+  await assert.rejects(
+    () => bootstrapReadyApp({
+      ...baseOptions({ manifestInput: manifestFixture({ optionalCapabilities: ['narration'] }), approvedFallbacks: { narration: { mode: 'silent' } } }),
+      loadApp: async () => { executed = true; },
+    }),
+    (e) => e instanceof BootstrapError && e.code === 'BOOTSTRAP_CAPABILITY_UNAVAILABLE' && e.metadata.capability === 'narration' && e.metadata.required === false
+  );
+  assert.equal(executed, false);
+});
+
 test('SB-003-AC08 mandatory container service init failure blocks launch and never enters a partial runtime', async () => {
   let executed = false;
   const coreServices = [{ name: 'sessionRegistration', init: async () => { throw new Error('database credentials leaked here'); } }];
