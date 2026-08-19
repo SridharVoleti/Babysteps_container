@@ -84,6 +84,32 @@ test('CC-002-AC09 omitted requiredCapabilities fails validation; an explicit emp
   assert.equal(explicitlyEmpty.ok, true);
 });
 
+test('CC-002-AC11 unknown top-level manifest fields are rejected under a strict allowlist', () => {
+  const result = validateManifest({ ...base, unexpectedField: 'anything' }, options);
+  assert.equal(result.ok, false);
+  assert.equal(result.error.code, 'MANIFEST_UNKNOWN_FIELD');
+  assert.equal(result.error.details.field, 'unexpectedField');
+});
+
+test('CC-002-AC11 alternate spellings of sensitive/platform-authoritative data are still rejected inside nested contentConfiguration', () => {
+  for (const [key, value] of [
+    ['apiKey', 'sk-abc123'],
+    ['access_token', 'tok-abc123'],
+    ['parentId', 'parent-1'],
+    ['userId', 'user-1'],
+  ]) {
+    const result = validateManifest({ ...base, contentConfiguration: { [key]: value } }, options);
+    assert.equal(result.ok, false, `expected ${key} to be rejected`);
+    assert.equal(result.error.code, 'MANIFEST_PROHIBITED_DATA');
+    assert.equal(JSON.stringify(result).includes(value), false);
+  }
+});
+
+test('CC-002-AC11 an arbitrary unknown nested key inside contentConfiguration remains app-owned opaque data', () => {
+  const result = validateManifest({ ...base, contentConfiguration: { curriculumTier: 'advanced', boardTheme: 'wood' } }, options);
+  assert.equal(result.ok, true);
+});
+
 test('CC-002-AC06 resolution is deterministic for same inputs', () => {
   const a = resolveManifest(base, options);
   const b = resolveManifest(structuredClone(base), structuredClone(options));
