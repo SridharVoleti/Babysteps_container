@@ -52,8 +52,10 @@
     "test:data-projection": "node --test tests/safety/sp-002-learning-data-projection.test.mjs",
     "test:egress-policy": "node --test tests/safety/sp-003-egress-policy.test.mjs",
     "test:release-composition": "node --test tests/release/pk-003-release-composition.test.mjs",
+    "test:conformance-gate": "node --test tests/conformance/tc-003-conformance-gate.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
-    "check:manifests": "node scripts/validate-manifests.mjs apps"
+    "check:manifests": "node scripts/validate-manifests.mjs apps",
+    "conformance": "node scripts/run-container-conformance.mjs"
   },
   "engines": {
     "node": ">=20"

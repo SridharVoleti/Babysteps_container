@@ -481,3 +481,16 @@ jobs:
         run: npm run test:release-composition
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  tc-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run TC-003 conformance gate acceptance tests
+        run: npm run test:conformance-gate
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
