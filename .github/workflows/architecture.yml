@@ -127,3 +127,15 @@ jobs:
         run: npm run test:contract-validation
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  sr-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run SR-001 session runtime acceptance tests
+        run: npm run test:session-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
