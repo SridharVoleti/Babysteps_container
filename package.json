@@ -19,6 +19,7 @@
     "test:session-lifecycle": "node --test tests/session/sr-002-session-lifecycle.test.mjs",
     "test:session-clock": "node --test tests/session/sr-003-session-clock.test.mjs",
     "test:session-completion": "node --test tests/session/sr-004-session-completion.test.mjs",
+    "test:session-interruption": "node --test tests/session/sr-005-session-interruption.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
