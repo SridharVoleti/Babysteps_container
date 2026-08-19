@@ -23,9 +23,10 @@ test('CC-002-AC01 valid minimal manifest resolves defaults and entry point may l
   let loaded = false;
   const result = await loadAppPackage('/tmp/app.manifest.json', options, {
     readText: async () => JSON.stringify(base),
-    loadModule: async () => { loaded = true; return { start: () => true }; }
+    loadModule: async () => { loaded = true; return { default: Object.freeze({ id: 'magical-math' }), start: () => true }; }
   });
   assert.equal(result.ok, true);
+  assert.equal(result.appDefinition.id, 'magical-math');
   assert.equal(loaded, true);
   assert.deepEqual(result.manifest.optionalCapabilities, []);
   assert.deepEqual(result.manifest.extensionPoints, []);
