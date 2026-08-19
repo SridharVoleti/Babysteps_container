@@ -42,6 +42,41 @@ export function createExtensionManager({ manifest, runtimeContext = undefined })
   });
 }
 
+// Validates type/version against the governance registry BEFORE importing the extension
+// module. In JavaScript, importing a module executes its top-level code as a side effect,
+// so validating an already-constructed extension object (as register() does) is too late
+// to guarantee an unapproved/incompatible module never executes. This loader guarantees
+// ordering: approval check first, dynamic import only on success.
+export async function loadApprovedExtensionModule({ type, version, moduleSpecifier, loadModule = (specifier) => import(specifier) }) {
+  if (typeof type !== 'string' || type.trim() === '' || typeof version !== 'string' || version.trim() === '') {
+    fail('EXTENSION_INVALID', 'A type and version are required to load an extension module.');
+  }
+  if (!isApprovedExtensionType(type)) {
+    fail('EXTENSION_NOT_APPROVED', 'Extension type is not approved for this app.');
+  }
+  if (!isSupportedExtensionVersion(type, version)) {
+    fail('EXTENSION_VERSION_UNSUPPORTED', 'Extension contract version is unsupported.');
+  }
+
+  let module;
+  try {
+    module = await loadModule(moduleSpecifier);
+  } catch {
+    fail('EXTENSION_MODULE_LOAD_FAILED', 'The approved extension module could not be loaded.');
+  }
+
+  const extension = module?.default ?? module;
+  if (!extension || extension.type !== type || extension.version !== version) {
+    fail('EXTENSION_INVALID', 'The loaded extension module does not match the validated type/version.');
+  }
+  return extension;
+}
+
+export async function registerApprovedExtension(manager, { type, version, moduleSpecifier, loadModule } = {}) {
+  const extension = await loadApprovedExtensionModule({ type, version, moduleSpecifier, loadModule });
+  return manager.register(extension);
+}
+
 export function evaluateExtensionNeed({ need, classification, approval } = {}) {
   if (!need || !['app-specific', 'reusable-container-capability'].includes(classification)) {
     return Object.freeze({ approved: false, action: 'CLASSIFY_NEED' });
