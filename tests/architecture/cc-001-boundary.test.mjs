@@ -25,6 +25,49 @@ test('CC-001-AC04 rejects app-side platform authority decisions', () => {
   assert.equal(violations[0]?.code, 'PLATFORM_AUTHORITY_REIMPLEMENTATION');
 });
 
+test('CC-001-P1 a class method or object-literal method under a matching name cannot bypass detection by declaration style alone', () => {
+  const classMethod = inspectSource(
+    'apps/demo/entitlement-class.mjs',
+    "export class Foo { decideEntitlement(subscriptionStatus) { return subscriptionStatus === 'active'; } }"
+  );
+  assert.ok(classMethod.some((v) => v.code === 'PLATFORM_AUTHORITY_REIMPLEMENTATION'));
+
+  const objectMethod = inspectSource(
+    'apps/demo/entitlement-object.mjs',
+    "export default { decideEntitlement(subscriptionStatus) { return subscriptionStatus === 'active'; } };"
+  );
+  assert.ok(objectMethod.some((v) => v.code === 'PLATFORM_AUTHORITY_REIMPLEMENTATION'));
+
+  const arrowProperty = inspectSource(
+    'apps/demo/entitlement-arrow.mjs',
+    "export const helpers = { decideEntitlement: (subscriptionStatus) => subscriptionStatus === 'active' };"
+  );
+  assert.ok(arrowProperty.some((v) => v.code === 'PLATFORM_AUTHORITY_REIMPLEMENTATION'));
+});
+
+test('CC-001-P1 renaming the wrapping function to unrelated vocabulary (canStartLearning, allowedNow) does not evade detection when it still reads raw entitlement/credit state', () => {
+  const renamed = inspectSource(
+    'apps/demo/can-start-learning.mjs',
+    "export function canStartLearning(user) { return user.subscriptionStatus === 'active' && user.creditsRemaining > 0; }"
+  );
+  assert.ok(renamed.some((v) => v.code === 'PLATFORM_AUTHORITY_RAW_STATE_ACCESS'));
+
+  const renamedArrow = inspectSource(
+    'apps/demo/allowed-now.mjs',
+    "export const allowedNow = (session) => session.sessionCreditBalance >= 1;"
+  );
+  assert.ok(renamedArrow.some((v) => v.code === 'PLATFORM_AUTHORITY_RAW_STATE_ACCESS'));
+});
+
+test('CC-001-P1 consuming an already-computed container decision (not raw state) is not flagged', () => {
+  const clean = inspectSource(
+    'apps/demo/uses-decision.mjs',
+    "export function renderLesson(entitled) { if (entitled) { return 'lesson'; } return 'locked'; }"
+  );
+  assert.equal(clean.some((v) => v.code === 'PLATFORM_AUTHORITY_RAW_STATE_ACCESS'), false);
+  assert.equal(clean.some((v) => v.code === 'PLATFORM_AUTHORITY_REIMPLEMENTATION'), false);
+});
+
 test('CC-001 boundary checks do not inspect container-owned implementation as app code', () => {
   const source = "export function decideEntitlement(subscriptionStatus) { return subscriptionStatus === 'active'; }";
   assert.deepEqual(inspectSource('src/container/internal/entitlement.mjs', source), []);
