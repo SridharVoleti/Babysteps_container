@@ -1,12 +1,18 @@
 import { readFile, writeFile, appendFile, readdir } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { join, dirname, basename } from 'node:path';
 import process from 'node:process';
 import { resolveManifest } from '../src/container/internal/manifest/index.mjs';
 import { manifestContract } from '../src/container/internal/manifest/contract.mjs';
 import { runConformance, buildConformanceReport, renderHumanReadableSummary } from '../src/container/internal/conformance/conformance-runner.mjs';
-import { buildReleaseComposition } from '../src/container/internal/release/release-composition.mjs';
+import {
+  buildReleaseComposition,
+  validateDeterministicDependencyLock,
+  compareManifestToPackagedComponents,
+} from '../src/container/internal/release/release-composition.mjs';
+import { CURRENT_VOICE_PACKAGE_VERSION } from '../src/container/internal/governance/voice-package-registry.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -60,22 +66,49 @@ async function runTest(requirement) {
 }
 
 const env = process.env;
-let releaseComposition = null;
+
+// PK-003/TC-003-P0: release-critical composition is derived from the actual packaged
+// artifacts (this package's own version, the real lockfile contents), never from a
+// placeholder/default fallback. A missing/unpinned/mismatched value fails the gate instead
+// of silently producing a PASS with fabricated metadata.
+let lockfileRaw;
 try {
+  lockfileRaw = await readFile('package-lock.json', 'utf8');
+} catch (error) {
+  console.error(`[NONDETERMINISTIC_DEPENDENCY] Could not read package-lock.json: ${error.message}`);
+  process.exitCode = 1;
+  process.exit(1);
+}
+const lockfileJson = JSON.parse(lockfileRaw);
+const dependencyLockFingerprint = `sha256:${createHash('sha256').update(lockfileRaw).digest('hex')}`;
+const resolvedVersions = {};
+for (const [pkgPath, entry] of Object.entries(lockfileJson.packages ?? {})) {
+  if (pkgPath === '' || !entry || typeof entry.version !== 'string') continue;
+  resolvedVersions[pkgPath] = entry.version;
+}
+
+let releaseComposition;
+try {
+  validateDeterministicDependencyLock({ fingerprint: dependencyLockFingerprint, resolvedVersions });
+
   releaseComposition = buildReleaseComposition({
     appId: manifest.appId,
     appVersion: manifest.appVersion,
     gitCommit: env.GITHUB_SHA ?? env.GIT_COMMIT ?? 'local-dev',
     buildId: env.GITHUB_RUN_ID ?? env.BUILD_ID ?? 'local-build',
-    containerVersion: env.CONTAINER_VERSION ?? '0.1.0',
+    containerVersion: packageJson.version,
     contentVersion: manifest.contentVersion,
     progressSchemaVersion: manifest.progressSchemaVersion,
-    voicePackageVersion: env.VOICE_PACKAGE_VERSION ?? '1.0.0',
+    voicePackageVersion: CURRENT_VOICE_PACKAGE_VERSION,
     manifestVersion: manifest.containerContractVersion,
-    dependencyLockFingerprint: env.DEPENDENCY_LOCK_FINGERPRINT ?? 'unpinned-local-dev',
+    dependencyLockFingerprint,
   });
+
+  compareManifestToPackagedComponents(manifest, releaseComposition);
 } catch (error) {
-  console.error(`[RELEASE_METADATA_INVALID] ${error.message}`);
+  console.error(`[${error.code ?? 'RELEASE_METADATA_INVALID'}] ${error.message}`);
+  process.exitCode = 1;
+  process.exit(1);
 }
 
 const conformanceRun = await runConformance({ manifest, runTest, releaseComposition });

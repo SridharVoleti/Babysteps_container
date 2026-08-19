@@ -17,3 +17,7 @@ export const VOICE_PACKAGE_REGISTRY = Object.freeze({
 export function resolveApprovedNarrationVoice(voicePackageVersion) {
   return VOICE_PACKAGE_REGISTRY[voicePackageVersion] ?? null;
 }
+
+// PK-003: the single voicePackageVersion the release composition/conformance gate reports
+// as "the packaged voice" for this container release.
+export const CURRENT_VOICE_PACKAGE_VERSION = '1.0.0';
