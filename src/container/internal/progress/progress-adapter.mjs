@@ -22,6 +22,14 @@ function classifyTransportFailure(error) {
   return 'PROGRESS_SAVE_FAILED';
 }
 
+function classifyRestoreFailure(error) {
+  const category = error?.metadata?.category;
+  if (category === 'VALIDATION') return 'PROGRESS_RESPONSE_INVALID';
+  return 'PROGRESS_RESTORE_FAILED';
+}
+
+const SCOPE_FIELDS = ['learnerId', 'appId', 'releaseId'];
+
 // App-specific learning code submits its own progress payload through this adapter; the shared
 // framework never interprets checkpoint meaning, it only handles the platform handoff and the
 // authoritative acknowledgement (see CR-001 for the equivalent boundary on content).
@@ -69,8 +77,54 @@ export function createProgressAdapter({ sessionIdentity = {}, progressClient, on
     return lastAcknowledged;
   }
 
+  // Authoritative restore is a read path only: it never consults or promotes local checkpoint
+  // state (lastAcknowledged above) — every call re-fetches from Babysteps, and app-specific
+  // interpretation of the returned payload happens entirely outside this module.
+  async function restore({ expectedSchemaVersion } = {}) {
+    let response;
+    try {
+      response = await progressClient.call('progress.restore', {});
+    } catch (error) {
+      const code = classifyRestoreFailure(error);
+      emit('progress_restore_failed', { reason: code });
+      fail(code, 'The authoritative progress restore could not be completed.', { cause: error?.code });
+    }
+
+    if (!response || typeof response.found !== 'boolean') {
+      emit('progress_restore_failed', { reason: 'PROGRESS_RESPONSE_INVALID' });
+      fail('PROGRESS_RESPONSE_INVALID', 'Babysteps returned an invalid progress restore response.');
+    }
+
+    if (!response.found) {
+      emit('progress_restore_outcome', { found: false });
+      return Object.freeze({ found: false, progressVersion: null, appProgressSchemaVersion: null, appProgress: null });
+    }
+
+    for (const field of SCOPE_FIELDS) {
+      if (response[field] !== undefined && response[field] !== sessionIdentity[field]) {
+        emit('progress_restore_failed', { reason: 'PROGRESS_SCOPE_MISMATCH' });
+        fail('PROGRESS_SCOPE_MISMATCH', `Restored progress scope "${field}" does not match the bound runtime.`, { field });
+      }
+    }
+
+    if (expectedSchemaVersion !== undefined && response.appProgressSchemaVersion !== undefined && response.appProgressSchemaVersion !== expectedSchemaVersion) {
+      emit('progress_restore_failed', { reason: 'PROGRESS_SCHEMA_INCOMPATIBLE' });
+      fail('PROGRESS_SCHEMA_INCOMPATIBLE', `Restored progress schema version "${response.appProgressSchemaVersion}" is incompatible with the expected version "${expectedSchemaVersion}".`, { found: response.appProgressSchemaVersion, expected: expectedSchemaVersion });
+    }
+
+    const result = Object.freeze({
+      found: true,
+      progressVersion: response.progressVersion,
+      appProgressSchemaVersion: response.appProgressSchemaVersion ?? null,
+      appProgress: Object.freeze({ ...(response.appProgress ?? {}) }),
+    });
+    emit('progress_restore_outcome', { found: true, progressVersion: result.progressVersion });
+    return result;
+  }
+
   return Object.freeze({
     checkpoint,
+    restore,
     get latestAcknowledged() { return lastAcknowledged; },
   });
 }

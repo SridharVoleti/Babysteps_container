@@ -26,6 +26,7 @@
     "test:content-runtime": "node --test tests/content/cr-001-content-runtime.test.mjs",
     "test:session-content-binding": "node --test tests/content/cr-002-session-content-binding.test.mjs",
     "test:progress-adapter": "node --test tests/progress/pa-001-progress-adapter.test.mjs",
+    "test:progress-restore": "node --test tests/progress/pa-002-progress-restore.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
