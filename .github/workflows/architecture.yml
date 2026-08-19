@@ -79,3 +79,15 @@ jobs:
         run: npm run test:runtime-binding
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  sb-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run SB-003 atomic bootstrap acceptance tests
+        run: npm run test:atomic-bootstrap
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
