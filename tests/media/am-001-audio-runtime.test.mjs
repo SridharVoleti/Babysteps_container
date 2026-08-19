@@ -173,6 +173,25 @@ test('AM-001-AC11 only coarse technical playback telemetry is emitted, not spoke
   }
 });
 
+test('AM-001-P1 telemetry never includes a raw player-adapter exception message or the app-supplied source reference', async () => {
+  const binding = await boundRuntime();
+  const events = [];
+  const throwingPlayerFactory = () => { throw new Error('leaked-narration-transcript-should-not-appear'); };
+  const runtime = createAudioRuntime({ runtimeBinding: binding, playerFactory: throwingPlayerFactory, onTelemetry: (e) => events.push(e) });
+
+  assert.throws(
+    () => runtime.play('secret-narration-source-ref.mp3'),
+    (e) => e instanceof AudioRuntimeError && e.code === 'AUDIO_PLAYBACK_FAILED'
+  );
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-narration-transcript'), false);
+    assert.equal(JSON.stringify(event).includes('secret-narration-source-ref'), false);
+    assert.equal('source' in event, false);
+  }
+});
+
 test('AM-001 a stale handle cannot be paused/resumed after replacement', async () => {
   const binding = await boundRuntime();
   const runtime = createAudioRuntime({ runtimeBinding: binding, playerFactory: fakePlayerFactory() });

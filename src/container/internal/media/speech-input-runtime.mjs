@@ -1,4 +1,5 @@
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
+import { sanitizeCause } from '../telemetry/sanitize-cause.mjs';
 
 export class SpeechInputError extends Error {
   constructor(code, message, metadata = {}) {
@@ -117,7 +118,7 @@ export function createSpeechInputRuntime({
     try {
       permission = await requestPermission();
     } catch (error) {
-      emit('speech_permission_failed', { cause: error?.message });
+      emit('speech_permission_failed', { cause: sanitizeCause(error) });
       fail('SPEECH_PERMISSION_DENIED', 'Microphone permission could not be resolved.', { cause: error?.message });
     }
     if (!permission || permission.granted !== true) {
@@ -130,7 +131,7 @@ export function createSpeechInputRuntime({
     try {
       recognizer = recognizerFactory(options);
     } catch (error) {
-      emit('speech_input_unavailable', { cause: error?.message });
+      emit('speech_input_unavailable', { cause: sanitizeCause(error) });
       fail('SPEECH_INPUT_UNAVAILABLE', 'The speech-input capability could not be started.', { cause: error?.message });
     }
 
@@ -156,7 +157,7 @@ export function createSpeechInputRuntime({
     }
     if (typeof recognizer.onError === 'function') {
       recognizer.onError(guardedDelivery('error', (error) => {
-        emit('speech_recognition_failed', { handleId: id, generation, cause: error?.message });
+        emit('speech_recognition_failed', { handleId: id, generation, cause: sanitizeCause(error) });
         options.onError?.(new SpeechInputError('SPEECH_RECOGNITION_FAILED', 'Speech recognition failed for the active request.', { cause: error?.message }));
       }));
     }
@@ -165,7 +166,7 @@ export function createSpeechInputRuntime({
       recognizer.start();
     } catch (error) {
       active = null;
-      emit('speech_input_unavailable', { cause: error?.message });
+      emit('speech_input_unavailable', { cause: sanitizeCause(error) });
       fail('SPEECH_INPUT_UNAVAILABLE', 'The speech-input capability failed to start capture.', { cause: error?.message });
     }
 

@@ -1,5 +1,6 @@
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
 import { resolveApprovedNarrationVoice } from '../governance/voice-package-registry.mjs';
+import { sanitizeCause } from '../telemetry/sanitize-cause.mjs';
 
 export class NarrationVoiceError extends Error {
   constructor(code, message, metadata = {}) {
@@ -65,7 +66,7 @@ export function createNarrationVoiceProvider({
       emit('narration_voice_initialized', { reason });
       return engine;
     } catch (error) {
-      emit('narration_voice_load_failed', { reason, cause: error?.message });
+      emit('narration_voice_load_failed', { reason, cause: sanitizeCause(error) });
       return null;
     }
   }
@@ -113,7 +114,7 @@ export function createNarrationVoiceProvider({
         ? await synthesize(text, loadedEngine, options)
         : `narration://${activeVoicePackage.id}@${activeVoicePackage.version}`;
     } catch (error) {
-      emit('narration_synthesis_failed', { cause: error?.message });
+      emit('narration_synthesis_failed', { cause: sanitizeCause(error) });
       fail('NARRATION_SYNTHESIS_FAILED', 'Narration synthesis failed for the requested text.', { cause: error?.message });
     }
 

@@ -137,6 +137,26 @@ test('AM-002-AC10 only coarse voice package/version/lifecycle telemetry is emitt
   }
 });
 
+test('AM-002-P1 telemetry never includes a raw voice-engine/synthesis exception message', async () => {
+  const events = [];
+  const loadFailure = await harness({
+    onTelemetry: (e) => events.push(e),
+    loadVoiceEngine: async () => { throw new Error('leaked-narration-transcript-load-failure'); },
+  });
+  await assert.rejects(() => loadFailure.provider.narrate('Text'));
+
+  const synthesisFailure = await harness({
+    onTelemetry: (e) => events.push(e),
+    synthesize: async () => { throw new Error('leaked-narration-transcript-synthesis-failure'); },
+  });
+  await assert.rejects(() => synthesisFailure.provider.narrate('Text'));
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-narration-transcript'), false);
+  }
+});
+
 test('AM-002-AC11 a fallback voice is used only when explicitly approved, never an arbitrary local selection', async () => {
   const { provider } = await harness({
     loadVoiceEngine: async (pkg) => { if (pkg.id === 'babysteps-standard-voice') throw new Error('missing'); return { pkg }; },

@@ -126,3 +126,16 @@ test('SP-001-AC11 only coarse policy/capability/purpose telemetry is emitted, wi
     assert.equal(JSON.stringify(event).includes('contactsSnapshot'), false);
   }
 });
+
+test('SP-001-P1 telemetry never includes a raw notification-adapter exception message', async () => {
+  const binding = await boundRuntime();
+  const events = [];
+  const notificationAdapter = { register: async () => { throw new Error('leaked-notification-payload-detail'); } };
+  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding, notificationAdapter, onTelemetry: (e) => events.push(e) });
+  const result = await policy.registerNotification('session-reminder-30-min', {});
+  assert.equal(result.registered, false);
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-notification-payload-detail'), false);
+  }
+});

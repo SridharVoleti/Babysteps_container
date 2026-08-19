@@ -182,3 +182,37 @@ test('AM-003-AC11 only coarse technical speech telemetry is emitted, not raw aud
     assert.ok(keys.every((k) => ['event', 'appId', 'correlationId', 'handleId', 'generation', 'reason', 'cause', 'kind'].includes(k)));
   }
 });
+
+test('AM-003-P1 telemetry never includes a raw permission/recognizer/recognition exception message', async () => {
+  const binding = await boundRuntime();
+  const events = [];
+
+  const permissionFailure = createSpeechInputRuntime({
+    runtimeBinding: binding, recognizerFactory: fakeRecognizerFactory(), onTelemetry: (e) => events.push(e),
+    requestPermission: async () => { throw new Error('leaked-transcript-permission-failure'); },
+  });
+  await assert.rejects(() => permissionFailure.startListening({}));
+
+  const recognizerCreationFailure = createSpeechInputRuntime({
+    runtimeBinding: binding, onTelemetry: (e) => events.push(e),
+    recognizerFactory: () => { throw new Error('leaked-transcript-recognizer-creation-failure'); },
+  });
+  await assert.rejects(() => recognizerCreationFailure.startListening({}));
+
+  const startFailureFactory = () => ({
+    start: () => { throw new Error('leaked-transcript-start-failure'); },
+    stop: () => {}, cancel: () => {}, onResult: () => {}, onError: () => {},
+  });
+  const startFailure = createSpeechInputRuntime({ runtimeBinding: binding, recognizerFactory: startFailureFactory, onTelemetry: (e) => events.push(e) });
+  await assert.rejects(() => startFailure.startListening({}));
+
+  const recognitionFailureFactory = fakeRecognizerFactory();
+  const recognitionFailure = createSpeechInputRuntime({ runtimeBinding: binding, recognizerFactory: recognitionFailureFactory, onTelemetry: (e) => events.push(e) });
+  await recognitionFailure.startListening({});
+  recognitionFailureFactory.errorCbs[0](new Error('leaked-transcript-recognition-failure'));
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-transcript'), false);
+  }
+});

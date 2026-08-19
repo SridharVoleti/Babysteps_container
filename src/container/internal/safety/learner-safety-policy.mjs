@@ -1,4 +1,5 @@
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
+import { sanitizeCause } from '../telemetry/sanitize-cause.mjs';
 
 export class LearnerSafetyError extends Error {
   constructor(code, message, metadata = {}) {
@@ -90,7 +91,7 @@ export function createLearnerSafetyPolicy({
     try {
       result = await notificationAdapter.register(purposeId, payload);
     } catch (error) {
-      emit('notification_permission_denied', { purposeId, cause: error?.message });
+      emit('notification_permission_denied', { purposeId, cause: sanitizeCause(error) });
       return Object.freeze({ registered: false, reason: 'NOTIFICATION_PERMISSION_DENIED' });
     }
     if (!result?.granted) {
