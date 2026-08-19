@@ -211,3 +211,15 @@ jobs:
         run: npm run test:activity-host
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  ah-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run AH-002 activity lifecycle/resource isolation acceptance tests
+        run: npm run test:activity-lifecycle
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
