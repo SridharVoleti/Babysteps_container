@@ -36,6 +36,21 @@ const RULES = [
     message: 'Learning apps must not implement independent browser-name/user-agent detection; use the shared DR-001 runtime capability service.',
     test: (source) => /navigator\s*\.\s*(?:userAgent|appVersion|vendor|platform)\b/.test(source),
   },
+  {
+    code: 'RESTRICTED_DEVICE_CAPABILITY_ACCESS',
+    message: 'Learning apps must not access contacts, camera/microphone, geolocation or file-system capabilities directly; microphone/STT is approved only through AM-003 and no other device capability is approved.',
+    test: (source) => /navigator\s*\.\s*(?:geolocation|contacts)\b|getUserMedia\s*\(|showOpenFilePicker\s*\(|type\s*=\s*['"]file['"]/.test(source),
+  },
+  {
+    code: 'UNRESTRICTED_EXTERNAL_NAVIGATION',
+    message: 'Learning apps must not open arbitrary external navigation/deep links/popups/new browser contexts; use the approved shared SP-001 navigation guard.',
+    test: (source) => /window\s*\.\s*open\s*\(|\bnew\s+Window\s*\(/.test(source),
+  },
+  {
+    code: 'LEARNER_FACING_GENERATIVE_AI',
+    message: 'Learner-facing generative/open-ended AI is not approved for the closed learner runtime.',
+    test: (source) => /from\s+['"](?:openai|@anthropic-ai\/sdk|@google\/generative-ai)['"]/.test(source),
+  },
 ];
 
 export function inspectSource(filePath, source) {

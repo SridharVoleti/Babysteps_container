@@ -48,6 +48,7 @@
     "test:local-ownership": "node --test tests/runtime/dr-003-local-ownership-coordinator.test.mjs",
     "test:error-boundary": "node --test tests/runtime/er-001-error-boundary.test.mjs",
     "test:connectivity-retry": "node --test tests/runtime/er-002-connectivity-retry.test.mjs",
+    "test:learner-safety-policy": "node --test tests/safety/sp-001-learner-safety-policy.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
