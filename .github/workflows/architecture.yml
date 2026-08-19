@@ -163,3 +163,15 @@ jobs:
         run: npm run test:session-clock
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  sr-004:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run SR-004 session completion acceptance tests
+        run: npm run test:session-completion
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
