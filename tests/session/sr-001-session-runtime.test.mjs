@@ -17,6 +17,7 @@ function manifestFixture(overrides = {}) {
   return {
     appId: 'magical-math', appVersion: '1.0.0', containerContractVersion: '1.0',
     contentVersion: '1.0.0', progressSchemaVersion: '1.0', entryPoint: './index.mjs',
+    requiredCapabilities: [],
     ...overrides,
   };
 }

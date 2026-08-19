@@ -68,6 +68,21 @@ test('CC-002-AC05 prohibited secret/authority fields fail without leaking values
   assert.equal(JSON.stringify(result).includes(secret), false);
 });
 
+test('CC-002-AC09 omitted requiredCapabilities fails validation; an explicit empty array is accepted', () => {
+  const { requiredCapabilities, ...withoutField } = base;
+  void requiredCapabilities;
+  const omitted = validateManifest(withoutField, options);
+  assert.equal(omitted.ok, false);
+  assert.equal(omitted.error.code, 'MANIFEST_INVALID');
+
+  const nonArray = validateManifest({ ...base, requiredCapabilities: 'progress' }, options);
+  assert.equal(nonArray.ok, false);
+  assert.equal(nonArray.error.code, 'MANIFEST_INVALID');
+
+  const explicitlyEmpty = validateManifest({ ...base, requiredCapabilities: [] }, options);
+  assert.equal(explicitlyEmpty.ok, true);
+});
+
 test('CC-002-AC06 resolution is deterministic for same inputs', () => {
   const a = resolveManifest(base, options);
   const b = resolveManifest(structuredClone(base), structuredClone(options));

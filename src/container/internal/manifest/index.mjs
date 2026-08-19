@@ -58,7 +58,11 @@ export function validateManifest(manifest, options = {}) {
     }
   }
 
-  for (const field of ['requiredCapabilities', 'optionalCapabilities', 'extensionPoints']) {
+  if (!isStringArray(manifest.requiredCapabilities)) {
+    return failure('MANIFEST_INVALID', 'App manifest field requiredCapabilities is required and must be an array of non-empty strings (an empty array is permitted).');
+  }
+
+  for (const field of ['optionalCapabilities', 'extensionPoints']) {
     if (manifest[field] !== undefined && !isStringArray(manifest[field])) {
       return failure('MANIFEST_INVALID', `App manifest field ${field} must be an array of non-empty strings.`);
     }
