@@ -1,6 +1,11 @@
 const REQUIRED_CLAIMS = ['learnerId','appId','releaseId','sessionId','launchMode','issuedAt','expiresAt','correlationId'];
 const ALLOWED_MODES = new Set(['start','resume']);
 
+// Centralized, documented clock-skew tolerance for launch-context issuance (SB-001).
+// A launch context issued more than this far in the future (relative to the container's
+// own clock) is rejected; callers cannot opt out of or widen this tolerance.
+export const MAX_FUTURE_ISSUANCE_SKEW_MS = 60_000;
+
 export class LaunchContextError extends Error {
   constructor(code, message) { super(message); this.name = 'LaunchContextError'; this.code = code; Object.freeze(this); }
 }
@@ -22,6 +27,7 @@ export async function validateLaunchContext({ launchContext, manifest, expectedR
 
   const issuedAt = Date.parse(claims.issuedAt); const expiresAt = Date.parse(claims.expiresAt); const current = now().getTime();
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || expiresAt <= issuedAt) fail('LAUNCH_CONTEXT_INVALID', 'Authorized launch timestamps are invalid.');
+  if (issuedAt > current + MAX_FUTURE_ISSUANCE_SKEW_MS) fail('LAUNCH_CONTEXT_NOT_YET_VALID', 'Authorized launch context is issued too far in the future.');
   if (current >= expiresAt) fail('LAUNCH_CONTEXT_EXPIRED', 'Authorized launch context has expired.');
 
   if (!manifest || claims.appId !== manifest.appId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized app does not match resolved application.');
