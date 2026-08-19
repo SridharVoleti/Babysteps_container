@@ -22,6 +22,11 @@ const RULES = [
     test: (source) => /(?:fetch|axios(?:\.(?:get|post|put|patch|delete))?)\s*\([^\n]*babysteps/i.test(source),
   },
   {
+    code: 'DIRECT_NETWORK_ACCESS_DENIED',
+    message: 'Learning apps must not perform raw network requests of any kind; use container-owned capability adapters. This is deny-by-default and applies regardless of the target host.',
+    test: (source) => /\bfetch\s*\(|\baxios(?:\s*\.\s*[a-zA-Z]+)?\s*\(|\bnew\s+XMLHttpRequest\s*\(|\bhttp\s*\.\s*request\s*\(|\bhttps\s*\.\s*request\s*\(|navigator\s*\.\s*sendBeacon\s*\(|\bnew\s+WebSocket\s*\(|\bnew\s+EventSource\s*\(/.test(source),
+  },
+  {
     code: 'PLATFORM_AUTHORITY_REIMPLEMENTATION',
     message: 'Identity, entitlement, subscription, session/credit authority and progress persistence remain platform/container owned.',
     test: (source) => /\b(?:function|const|let|var)\s+(?:decide|determine|validate|check|calculate|compute)(?:LearnerOwnership|Entitlement|Subscription|SessionEligibility|SessionCredit|CreditEligibility)\b/i.test(source),
