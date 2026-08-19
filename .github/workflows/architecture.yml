@@ -199,3 +199,15 @@ jobs:
         run: npm run test:connected-time
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  ah-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run AH-001 activity host contract acceptance tests
+        run: npm run test:activity-host
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture

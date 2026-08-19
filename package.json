@@ -21,6 +21,7 @@
     "test:session-completion": "node --test tests/session/sr-004-session-completion.test.mjs",
     "test:session-interruption": "node --test tests/session/sr-005-session-interruption.test.mjs",
     "test:connected-time": "node --test tests/session/sr-006-connected-time.test.mjs",
+    "test:activity-host": "node --test tests/activities/ah-001-activity-host.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
