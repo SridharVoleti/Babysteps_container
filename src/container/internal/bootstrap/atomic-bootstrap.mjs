@@ -8,14 +8,19 @@ import { createBabystepsLaunchVerifier, LaunchVerifierError } from './babysteps-
 import { bindAuthorizedRuntime, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
 
 // Lazily constructed so importing this module never requires the production verification
-// key to be configured (test/dev callers always supply their own launchOptions.verifier).
+// key(s) to be configured (test/dev callers always supply their own launchOptions.verifier).
+// SB-001: BABYSTEPS_LAUNCH_PUBLIC_KEYS carries only Babysteps' public verification key(s) -
+// a JSON object mapping kid -> public P-256 EC JWK - never a secret capable of signing.
 let defaultProductionVerifier = null;
 function resolveDefaultVerifier(env = process.env) {
   if (!defaultProductionVerifier) {
-    defaultProductionVerifier = createBabystepsLaunchVerifier({
-      verificationKey: env.BABYSTEPS_LAUNCH_VERIFICATION_KEY,
-      previousVerificationKeys: (env.BABYSTEPS_LAUNCH_VERIFICATION_KEYS_PREVIOUS ?? '').split(',').map((k) => k.trim()).filter(Boolean),
-    });
+    let publicKeys;
+    try {
+      publicKeys = JSON.parse(env.BABYSTEPS_LAUNCH_PUBLIC_KEYS ?? '');
+    } catch {
+      publicKeys = undefined;
+    }
+    defaultProductionVerifier = createBabystepsLaunchVerifier({ publicKeys });
   }
   return defaultProductionVerifier;
 }

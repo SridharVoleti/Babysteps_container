@@ -179,16 +179,24 @@ test('SB-003-AC10 retried initialization leaves no duplicate event handlers/list
 });
 
 test('SB-001-P0 the mandatory bootstrap path uses the production Babysteps verifier by default when none is supplied', async (t) => {
-  const key = 'e'.repeat(32);
-  const priorKey = process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
-  process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = key;
+  const keyPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  delete publicJwk.d;
+  const kid = 'key-2026-08';
+
+  const priorKeys = process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS;
+  process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS = JSON.stringify({ [kid]: publicJwk });
   t.after(() => {
-    if (priorKey === undefined) delete process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
-    else process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = priorKey;
+    if (priorKeys === undefined) delete process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS;
+    else process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS = priorKeys;
   });
 
-  const sign = (claims) => createHmac('sha256', key).update(JSON.stringify(claims, Object.keys(claims).sort())).digest('hex');
-  const productionEnvelope = { claims: structuredClone(baseClaims), proof: sign(baseClaims) };
+  const sign = async (claims) => {
+    const data = new TextEncoder().encode(JSON.stringify(claims, Object.keys(claims).sort()));
+    const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, data);
+    return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const productionEnvelope = { claims: structuredClone(baseClaims), proof: await sign(baseClaims), kid };
 
   const { verifier: _ignoredTestVerifier, ...launchOptionsWithoutVerifier } = launchOptions;
   void _ignoredTestVerifier;
