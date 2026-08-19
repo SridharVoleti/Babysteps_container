@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { validateLaunchContext } from '../../src/container/internal/bootstrap/launch-context.mjs';
 import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
 import { createActivityLifecycleManager } from '../../src/container/internal/activities/activity-lifecycle-manager.mjs';
-import { createSpeechInputRuntime, SpeechInputError } from '../../src/container/internal/media/speech-input-runtime.mjs';
+import { createSpeechInputRuntime, createProductionSpeechInputRuntime, SpeechInputError } from '../../src/container/internal/media/speech-input-runtime.mjs';
 
 const baseClaims = Object.freeze({
   learnerId: 'learner-1', appId: 'magical-math', releaseId: 'release-1', sessionId: 'session-1',
@@ -214,5 +214,38 @@ test('AM-003-P1 telemetry never includes a raw permission/recognizer/recognition
   assert.ok(events.length > 0);
   for (const event of events) {
     assert.equal(JSON.stringify(event).includes('leaked-transcript'), false);
+  }
+});
+
+test('AM-003-P0 production speech input fails closed when no supported browser primitive is available', async () => {
+  const binding = await boundRuntime();
+  assert.equal(typeof globalThis.SpeechRecognition, 'undefined');
+  assert.equal(typeof globalThis.webkitSpeechRecognition, 'undefined');
+  assert.equal(typeof globalThis.navigator, 'undefined');
+  const runtime = createProductionSpeechInputRuntime({ runtimeBinding: binding });
+  await assert.rejects(
+    () => runtime.startListening({}),
+    (e) => e instanceof SpeechInputError && e.code === 'SPEECH_PERMISSION_DENIED'
+  );
+});
+
+test('AM-003-P0 production speech input uses a real browser recognizer and reflects actual granted microphone permission', async () => {
+  const binding = await boundRuntime();
+  const fakeStream = { getTracks: () => [{ stop: () => {} }] };
+  globalThis.navigator = { mediaDevices: { getUserMedia: async () => fakeStream } };
+  class FakeSpeechRecognition {
+    start() { this.started = true; }
+    stop() {}
+    abort() {}
+  }
+  globalThis.SpeechRecognition = FakeSpeechRecognition;
+  try {
+    const runtime = createProductionSpeechInputRuntime({ runtimeBinding: binding });
+    const handle = await runtime.startListening({});
+    assert.equal(typeof handle.id, 'number');
+    assert.equal(runtime.isListening(), true);
+  } finally {
+    delete globalThis.navigator;
+    delete globalThis.SpeechRecognition;
   }
 });

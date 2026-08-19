@@ -185,3 +185,64 @@ export function createSpeechInputRuntime({
     isListening: () => active !== null,
   });
 }
+
+function resolveSpeechRecognitionCtor() {
+  if (typeof SpeechRecognition === 'function') return SpeechRecognition;
+  if (typeof webkitSpeechRecognition === 'function') return webkitSpeechRecognition;
+  return null;
+}
+
+// AM-003-P0: a real browser Web Speech API adapter. Throws when no supported browser
+// speech-recognition primitive exists, so it can never silently stand in as a working
+// recognizer (mirrors AM-001's real HTMLAudioElement default).
+function productionRecognizerFactory() {
+  const Ctor = resolveSpeechRecognitionCtor();
+  if (!Ctor) {
+    throw new Error('No supported browser speech-recognition primitive (SpeechRecognition) is available.');
+  }
+  const recognizer = new Ctor();
+  recognizer.continuous = false;
+  recognizer.interimResults = false;
+  let resultCallback = null;
+  let errorCallback = null;
+  recognizer.onresult = (event) => {
+    const transcript = event?.results?.[0]?.[0]?.transcript ?? '';
+    resultCallback?.({ text: transcript });
+  };
+  recognizer.onerror = (event) => errorCallback?.(new Error(event?.error ?? 'Speech recognition error.'));
+  return {
+    start: () => recognizer.start(),
+    stop: () => recognizer.stop(),
+    cancel: () => recognizer.abort(),
+    onResult: (cb) => { resultCallback = cb; },
+    onError: (cb) => { errorCallback = cb; },
+  };
+}
+
+// AM-003-P0: real getUserMedia-based microphone permission. Reflects the actual browser/
+// user permission state - denied/unavailable by default rather than an unconditional grant.
+async function productionRequestPermission() {
+  if (typeof navigator === 'undefined' || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    return { granted: false };
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    for (const track of stream.getTracks?.() ?? []) track.stop();
+    return { granted: true };
+  } catch {
+    return { granted: false };
+  }
+}
+
+// AM-003-P0: the only production entry point for speech input. Uses the real browser
+// microphone/STT adapters above rather than createSpeechInputRuntime()'s permissive
+// defaults (which stay in place for AM-003's own unit tests to swap in fakes, the same
+// generic-primitive-plus-production-wrapper pattern AM-002 already uses).
+export function createProductionSpeechInputRuntime({ runtimeBinding, onTelemetry = () => {} }) {
+  return createSpeechInputRuntime({
+    runtimeBinding,
+    recognizerFactory: productionRecognizerFactory,
+    requestPermission: productionRequestPermission,
+    onTelemetry,
+  });
+}
