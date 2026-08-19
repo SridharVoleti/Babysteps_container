@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "exports": {
+    ".": "./src/container/public/index.mjs",
+    "./capabilities": "./src/container/public/capabilities.mjs",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "test": "node --test",
     "test:architecture": "node --test tests/architecture/*.test.mjs",
@@ -29,6 +37,7 @@
     "test:progress-restore": "node --test tests/progress/pa-002-progress-restore.test.mjs",
     "test:pending-progress-recovery": "node --test tests/progress/pa-003-pending-progress-recovery.test.mjs",
     "test:learning-session-shell": "node --test tests/shell/ux-001-learning-session-shell.test.mjs",
+    "test:package-boundary": "node --test tests/architecture/cc-003-package-boundary.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },

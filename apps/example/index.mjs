@@ -1,5 +1,5 @@
-import { defineLearningApp } from '../../src/container/public/index.mjs';
+import { defineLearningApp } from '@babysteps/consumer-app-container';
 
 export default defineLearningApp({
-  id: 'example-learning-app',
+  id: 'example',
 });

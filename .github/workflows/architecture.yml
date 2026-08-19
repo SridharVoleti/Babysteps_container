@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-001 architecture tests
         run: npm run test:architecture
       - name: Enforce CC-001 app boundaries
@@ -27,6 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-002 manifest acceptance tests
         run: npm run test:manifest
       - name: Validate all app manifests
@@ -39,8 +41,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-003 capability acceptance tests
         run: npm run test:capabilities
+      - name: Run CC-003 package boundary tests
+        run: npm run test:package-boundary
       - name: Enforce app capability/platform boundaries
         run: npm run check:architecture
 
@@ -51,6 +56,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-004 extension acceptance tests
         run: npm run test:extensions
       - name: Enforce extension boundaries
@@ -63,6 +69,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SB-001 launch-context acceptance tests
         run: npm run test:launch-context
       - name: Re-enforce architecture boundaries
@@ -75,6 +82,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SB-002 runtime context binding acceptance tests
         run: npm run test:runtime-binding
       - name: Re-enforce architecture boundaries
@@ -87,6 +95,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SB-003 atomic bootstrap acceptance tests
         run: npm run test:atomic-bootstrap
       - name: Re-enforce architecture boundaries
@@ -99,6 +108,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run API-001 Babysteps API client acceptance tests
         run: npm run test:api-client
       - name: Re-enforce architecture boundaries
@@ -111,6 +121,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run API-002 authenticated request context acceptance tests
         run: npm run test:auth-context
       - name: Re-enforce architecture boundaries
@@ -123,6 +134,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run API-003 contract validation acceptance tests
         run: npm run test:contract-validation
       - name: Re-enforce architecture boundaries
@@ -135,6 +147,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-001 session runtime acceptance tests
         run: npm run test:session-runtime
       - name: Re-enforce architecture boundaries
@@ -147,6 +160,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-002 session lifecycle acceptance tests
         run: npm run test:session-lifecycle
       - name: Re-enforce architecture boundaries
@@ -159,6 +173,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-003 session clock acceptance tests
         run: npm run test:session-clock
       - name: Re-enforce architecture boundaries
@@ -171,6 +186,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-004 session completion acceptance tests
         run: npm run test:session-completion
       - name: Re-enforce architecture boundaries
@@ -183,6 +199,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-005 session interruption/resume acceptance tests
         run: npm run test:session-interruption
       - name: Re-enforce architecture boundaries
@@ -195,6 +212,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SR-006 connected learning time acceptance tests
         run: npm run test:connected-time
       - name: Re-enforce architecture boundaries
@@ -207,6 +225,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run AH-001 activity host contract acceptance tests
         run: npm run test:activity-host
       - name: Re-enforce architecture boundaries
@@ -219,6 +238,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run AH-002 activity lifecycle/resource isolation acceptance tests
         run: npm run test:activity-lifecycle
       - name: Re-enforce architecture boundaries
@@ -231,6 +251,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CR-001 app-owned content binding acceptance tests
         run: npm run test:content-runtime
       - name: Re-enforce architecture boundaries
@@ -243,6 +264,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CR-002 session content version pinning acceptance tests
         run: npm run test:session-content-binding
       - name: Re-enforce architecture boundaries
@@ -255,6 +277,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run PA-001 standard progress checkpoint handoff acceptance tests
         run: npm run test:progress-adapter
       - name: Re-enforce architecture boundaries
@@ -267,6 +290,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run PA-002 authoritative progress restore acceptance tests
         run: npm run test:progress-restore
       - name: Re-enforce architecture boundaries
@@ -279,6 +303,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run PA-003 pending progress recovery acceptance tests
         run: npm run test:pending-progress-recovery
       - name: Re-enforce architecture boundaries
@@ -291,6 +316,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run UX-001 learning session shell acceptance tests
         run: npm run test:learning-session-shell
       - name: Re-enforce architecture boundaries
