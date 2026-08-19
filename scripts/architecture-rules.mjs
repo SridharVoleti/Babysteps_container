@@ -51,6 +51,11 @@ const RULES = [
     message: 'Learner-facing generative/open-ended AI is not approved for the closed learner runtime.',
     test: (source) => /from\s+['"](?:openai|@anthropic-ai\/sdk|@google\/generative-ai)['"]/.test(source),
   },
+  {
+    code: 'UNAPPROVED_NETWORK_SDK_IMPORT',
+    message: 'Learning apps must not import third-party analytics/tracking SDKs directly; use an SP-003 explicitly approved shared provider adapter.',
+    test: (source) => /from\s+['"](?:react-ga\d*|@segment\/analytics-next|mixpanel-browser|amplitude-js|@amplitude\/analytics-browser|@sentry\/browser|@sentry\/react)['"]/.test(source),
+  },
 ];
 
 export function inspectSource(filePath, source) {

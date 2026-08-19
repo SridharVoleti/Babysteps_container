@@ -50,6 +50,7 @@
     "test:connectivity-retry": "node --test tests/runtime/er-002-connectivity-retry.test.mjs",
     "test:learner-safety-policy": "node --test tests/safety/sp-001-learner-safety-policy.test.mjs",
     "test:data-projection": "node --test tests/safety/sp-002-learning-data-projection.test.mjs",
+    "test:egress-policy": "node --test tests/safety/sp-003-egress-policy.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
