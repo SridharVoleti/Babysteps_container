@@ -283,3 +283,15 @@ jobs:
         run: npm run test:pending-progress-recovery
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  ux-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run UX-001 learning session shell acceptance tests
+        run: npm run test:learning-session-shell
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture

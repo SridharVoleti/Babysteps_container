@@ -28,6 +28,7 @@
     "test:progress-adapter": "node --test tests/progress/pa-001-progress-adapter.test.mjs",
     "test:progress-restore": "node --test tests/progress/pa-002-progress-restore.test.mjs",
     "test:pending-progress-recovery": "node --test tests/progress/pa-003-pending-progress-recovery.test.mjs",
+    "test:learning-session-shell": "node --test tests/shell/ux-001-learning-session-shell.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
