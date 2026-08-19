@@ -13,15 +13,32 @@ export class AudioRuntimeError extends Error {
 
 function fail(code, message, metadata) { throw new AudioRuntimeError(code, message, metadata); }
 
-function defaultPlayerFactory() {
-  const endedCallbacks = [];
-  const errorCallbacks = [];
+// AM-001-P0: the production default is a real HTMLAudioElement-backed adapter (a genuine
+// browser playback primitive), not a no-op. When no supported browser audio primitive
+// exists (e.g. this module loaded outside a browser without an explicit playerFactory
+// override), it throws instead of returning a fake player - play()'s existing catch/fail
+// path then normalizes that into AUDIO_PLAYBACK_FAILED, so a missing/unavailable adapter
+// can never produce a successful playback handle.
+function defaultPlayerFactory(source) {
+  if (typeof Audio !== 'function') {
+    throw new Error('No supported browser audio playback primitive (HTMLAudioElement) is available.');
+  }
+  const element = new Audio(source);
+  element.preload = 'auto';
+  let endedCallback = null;
+  let errorCallback = null;
+  element.addEventListener('ended', () => endedCallback?.());
+  element.addEventListener('error', () => errorCallback?.(element.error ?? new Error('Audio element playback error.')));
+  const startResult = element.play();
+  if (startResult && typeof startResult.catch === 'function') {
+    startResult.catch((error) => errorCallback?.(error));
+  }
   return {
-    pause() {},
-    resume() {},
-    stop() {},
-    onEnded: (cb) => { endedCallbacks.push(cb); },
-    onError: (cb) => { errorCallbacks.push(cb); },
+    pause: () => element.pause(),
+    resume: () => element.play(),
+    stop: () => { element.pause(); element.currentTime = 0; },
+    onEnded: (cb) => { endedCallback = cb; },
+    onError: (cb) => { errorCallback = cb; },
   };
 }
 

@@ -46,6 +46,44 @@ function fakePlayerFactory() {
   return factory;
 }
 
+test('AM-001-P0 without an explicit playerFactory, a missing browser audio primitive fails closed instead of returning a fake successful handle', async () => {
+  const binding = await boundRuntime();
+  assert.equal(typeof globalThis.Audio, 'undefined');
+  const runtime = createAudioRuntime({ runtimeBinding: binding });
+  assert.throws(
+    () => runtime.play('spoken-feedback.mp3'),
+    (e) => e instanceof AudioRuntimeError && e.code === 'AUDIO_PLAYBACK_FAILED'
+  );
+});
+
+test('AM-001-P0 without an explicit playerFactory, a real browser audio primitive is used for production playback', async () => {
+  const binding = await boundRuntime();
+  const created = [];
+  class FakeAudioElement {
+    constructor(src) {
+      this.src = src;
+      this.currentTime = 0;
+      this.listeners = {};
+      created.push(this);
+    }
+    addEventListener(event, cb) { (this.listeners[event] ??= []).push(cb); }
+    play() { return Promise.resolve(); }
+    pause() {}
+  }
+  globalThis.Audio = FakeAudioElement;
+  try {
+    const runtime = createAudioRuntime({ runtimeBinding: binding });
+    const handle = runtime.play('approved-narration-source.mp3');
+    assert.equal(typeof handle.id, 'number');
+    assert.equal(created.length, 1);
+    assert.equal(created[0].src, 'approved-narration-source.mp3');
+    assert.ok(created[0].listeners.ended);
+    assert.ok(created[0].listeners.error);
+  } finally {
+    delete globalThis.Audio;
+  }
+});
+
 test('AM-001-AC01 an active activity plays approved audio through the shared technical facade', async () => {
   const binding = await boundRuntime();
   const factory = fakePlayerFactory();
