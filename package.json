@@ -42,6 +42,7 @@
     "test:package-boundary": "node --test tests/architecture/cc-003-package-boundary.test.mjs",
     "test:audio-runtime": "node --test tests/media/am-001-audio-runtime.test.mjs",
     "test:narration-voice": "node --test tests/media/am-002-narration-voice-provider.test.mjs",
+    "test:speech-input": "node --test tests/media/am-003-speech-input-runtime.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },
