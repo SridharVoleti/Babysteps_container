@@ -61,7 +61,12 @@ async function runTest(requirement) {
     await execFileAsync(process.execPath, ['--test', ...files]);
     return { status: 'PASS' };
   } catch (error) {
-    return { status: 'FAIL', reason: (error?.stderr || error?.message || 'CONFORMANCE_MANDATORY_TEST_FAILED').toString().slice(0, 500) };
+    // TC-003-AC11: raw stderr/stdout/error text may help a CI operator diagnose the
+    // failure, so it goes to the job's own console (a protected CI log), but only a
+    // sanitized technical category is ever returned for the conformance report/artifacts.
+    console.error(`[${requirement.id}] mandatory test failed:`);
+    console.error((error?.stderr || error?.message || 'unknown error').toString().slice(0, 2000));
+    return { status: 'FAIL', reason: 'TEST_PROCESS_EXIT_NONZERO' };
   }
 }
 

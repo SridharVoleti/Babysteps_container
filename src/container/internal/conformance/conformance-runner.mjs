@@ -14,6 +14,25 @@ function fail(code, message, metadata) { throw new ConformanceError(code, messag
 
 const VALID_STATUSES = new Set(['PASS', 'FAIL', 'SKIP']);
 
+// TC-003-AC11: the fixed, exhaustive set of technical failure categories a conformance
+// artifact may report. Raw exception messages/stdout/stderr/outcome.reason free text can
+// never reach the JSON/Markdown report or GitHub step summary - only one of these codes can.
+export const APPROVED_FAILURE_REASON_CODES = Object.freeze([
+  'CONFORMANCE_MANDATORY_TEST_FAILED',
+  'CONFORMANCE_REQUIRED_TEST_MISSING',
+  'CONFORMANCE_REQUIREMENT_TEST_FAILED',
+  'TEST_PROCESS_EXIT_NONZERO',
+  'TEST_ASSERTION_FAILED',
+  'TEST_TIMEOUT',
+  'TEST_EXECUTION_ERROR',
+]);
+const APPROVED_FAILURE_REASON_CODE_SET = new Set(APPROVED_FAILURE_REASON_CODES);
+
+export function sanitizeFailureReason(rawReason) {
+  if (typeof rawReason === 'string' && APPROVED_FAILURE_REASON_CODE_SET.has(rawReason)) return rawReason;
+  return 'CONFORMANCE_REQUIREMENT_TEST_FAILED';
+}
+
 // TC-003: applicability is manifest-driven only. There is no per-requirement "skip"/"waive"
 // parameter anywhere in this module - once a requirement is applicable it is mandatory.
 export function resolveApplicableRequirements(manifest, registry = CONTAINER_REQUIREMENT_TESTS) {
@@ -39,8 +58,10 @@ export async function runConformance({
     let outcome;
     try {
       outcome = await runTest(requirement);
-    } catch (error) {
-      outcome = { status: 'FAIL', reason: error?.message ?? 'CONFORMANCE_MANDATORY_TEST_FAILED' };
+    } catch {
+      // The raw thrown error is never inspected/stored here - only a fixed technical
+      // category can flow into a conformance result (TC-003-AC11).
+      outcome = { status: 'FAIL', reason: 'CONFORMANCE_MANDATORY_TEST_FAILED' };
     }
     if (!outcome || !VALID_STATUSES.has(outcome.status)) {
       outcome = { status: 'FAIL', reason: 'CONFORMANCE_REQUIRED_TEST_MISSING' };
@@ -49,7 +70,7 @@ export async function runConformance({
       id: requirement.id,
       mandatory: requirement.mandatory,
       status: outcome.status,
-      reason: outcome.reason ?? null,
+      reason: outcome.status === 'PASS' ? null : sanitizeFailureReason(outcome.reason),
       durationMs: clock() - startedAt,
     }));
   }

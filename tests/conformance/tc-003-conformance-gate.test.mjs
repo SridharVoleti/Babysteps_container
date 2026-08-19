@@ -101,6 +101,37 @@ test('TC-003-AC11 reports contain technical identifiers/outcomes only, no creden
   }
 });
 
+test('TC-003-P1 raw outcome.reason/error.message/stderr sentinels never reach the JSON report, Markdown summary or step summary', async () => {
+  const sentinels = [
+    'leaked-learner-transcript-should-not-appear',
+    'accessToken=sk-live-abc123',
+    'parentEmail=parent@example.com',
+    '/Users/learner/secret/path.txt',
+    'credential-dump-XYZ',
+  ];
+  for (const sentinel of sentinels) {
+    const runTest = async (requirement) => (requirement.id === 'SP-001' ? { status: 'FAIL', reason: sentinel } : { status: 'PASS' });
+    const run = await runConformance({ manifest: baseManifest, runTest });
+    const report = buildConformanceReport({ conformanceRun: run, appId: 'magical-math', appVersion: '1.0.0', gitCommit: 'abc123' });
+    const summary = renderHumanReadableSummary(report);
+    assert.equal(JSON.stringify(report).includes(sentinel), false);
+    assert.equal(summary.includes(sentinel), false);
+
+    const failed = report.results.find((r) => r.id === 'SP-001');
+    assert.equal(failed.status, 'FAIL');
+    assert.notEqual(failed.reason, sentinel);
+  }
+
+  // A thrown error's message must not leak either.
+  const throwingRunTest = async (requirement) => {
+    if (requirement.id === 'SP-001') throw new Error('accessToken=sk-live-thrown-secret');
+    return { status: 'PASS' };
+  };
+  const throwRun = await runConformance({ manifest: baseManifest, runTest: throwingRunTest });
+  const throwReport = buildConformanceReport({ conformanceRun: throwRun, appId: 'magical-math', appVersion: '1.0.0', gitCommit: 'abc123' });
+  assert.equal(JSON.stringify(throwReport).includes('sk-live-thrown-secret'), false);
+});
+
 test('TC-003 requires a test-execution function to run the gate', async () => {
   await assert.rejects(() => runConformance({ manifest: baseManifest }), (e) => e instanceof ConformanceError && e.code === 'CONFORMANCE_ENVIRONMENT_UNAVAILABLE');
 });
