@@ -31,6 +31,11 @@ const RULES = [
     message: 'Identity, entitlement, subscription, session/credit authority and progress persistence remain platform/container owned.',
     test: (source) => /\b(?:function|const|let|var)\s+(?:decide|determine|validate|check|calculate|compute)(?:LearnerOwnership|Entitlement|Subscription|SessionEligibility|SessionCredit|CreditEligibility)\b/i.test(source),
   },
+  {
+    code: 'BROWSER_DETECTION_BYPASS',
+    message: 'Learning apps must not implement independent browser-name/user-agent detection; use the shared DR-001 runtime capability service.',
+    test: (source) => /navigator\s*\.\s*(?:userAgent|appVersion|vendor|platform)\b/.test(source),
+  },
 ];
 
 export function inspectSource(filePath, source) {
