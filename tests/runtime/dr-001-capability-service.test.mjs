@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { createRuntimeCapabilityService, createRuntimeCapabilityBootstrapService, RuntimeCapabilityError, BASELINE_REQUIRED_CAPABILITY } from '../../src/container/internal/runtime/capability-service.mjs';
 import { inspectSource } from '../../scripts/architecture-rules.mjs';
 import { runAtomicBootstrap, BootstrapError } from '../../src/container/internal/bootstrap/atomic-bootstrap.mjs';
+import { collectBrowserRuntimeGraphViolations } from '../../scripts/browser-runtime-graph.mjs';
 
 const available = async () => ({ status: 'AVAILABLE' });
 const unavailable = async () => ({ status: 'UNAVAILABLE' });
@@ -158,4 +159,9 @@ test('DR-001 runs as a mandatory SB-003 bootstrap core service and blocks bootst
   const readyServices = [createRuntimeCapabilityBootstrapService({ probes: { [BASELINE_REQUIRED_CAPABILITY]: available } })];
   const readiness = await runAtomicBootstrap({ manifestInput, manifestOptions, launchContext, launchOptions, capabilityAdapters, coreServices: readyServices });
   assert.equal(readiness.ok, true);
+});
+
+test('DR-001-P0 the final browser runtime dependency graph resolves no node:* imports', async () => {
+  const violations = await collectBrowserRuntimeGraphViolations();
+  assert.deepEqual(violations, []);
 });

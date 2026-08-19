@@ -55,6 +55,7 @@
     "test:conformance-gate": "node --test tests/conformance/tc-003-conformance-gate.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps",
+    "check:browser-runtime": "node scripts/check-browser-runtime.mjs",
     "conformance": "node scripts/run-container-conformance.mjs"
   },
   "engines": {

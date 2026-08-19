@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { scopeAuthorityRequest, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
 import { createRetryPolicy } from '../runtime/connectivity-service.mjs';
 
@@ -100,7 +99,7 @@ export function createBabystepsApiClient({
     // when the caller (e.g. PA-003's recovery adapter) supplies a stable logical
     // idempotencyKey on the payload, that value becomes the transport header verbatim
     // instead of a fresh UUID being generated per call.
-    const requestId = randomUUID();
+    const requestId = crypto.randomUUID();
     const logicalIdempotencyKey = typeof payload.idempotencyKey === 'string' && payload.idempotencyKey.trim() !== ''
       ? payload.idempotencyKey
       : requestId;
