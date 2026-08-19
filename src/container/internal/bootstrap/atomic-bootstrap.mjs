@@ -1,5 +1,7 @@
+import { readFile } from 'node:fs/promises';
 import { APPROVED_CAPABILITIES, createCapabilityFacade } from '../capabilities/index.mjs';
 import { resolveManifest } from '../manifest/index.mjs';
+import { loadAppPackage } from '../manifest/load-app-package.mjs';
 import { validateLaunchContext, LaunchContextError } from './launch-context.mjs';
 import { createBabystepsLaunchVerifier, LaunchVerifierError } from './babysteps-launch-verifier.mjs';
 import { bindAuthorizedRuntime, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
@@ -147,4 +149,48 @@ export async function bootstrapReadyApp({ loadApp, ...bootstrapOptions }) {
   }
   const app = await loadApp(readiness);
   return Object.freeze({ readiness, app });
+}
+
+// SB-001/SB-003: the single mandatory production entrypoint for launching a learning app
+// from an on-disk manifest + entry point. It is the only production path that can import
+// app-specific code: readiness (authorization, manifest, capabilities, mandatory services)
+// must succeed first, and loadAppPackage() itself refuses to import anything without the
+// bound runtime this function produces. No other production API composes these steps, so
+// there is no way to reach app code without passing through authorization first.
+export async function bootstrapLearningApp({
+  manifestPath,
+  manifestOptions = {},
+  readManifestText = (path) => readFile(path, 'utf8'),
+  loadModule,
+  ...bootstrapOptions
+}) {
+  if (typeof manifestPath !== 'string' || manifestPath.trim() === '') {
+    throw new BootstrapError('BOOTSTRAP_REQUIRED_DEPENDENCY_FAILED', 'A manifestPath is required to launch a learning app.', { phase: 'LOAD_MANIFEST' });
+  }
+
+  let manifestInput;
+  try {
+    manifestInput = JSON.parse(await readManifestText(manifestPath));
+  } catch {
+    throw new BootstrapError('BOOTSTRAP_REQUIRED_DEPENDENCY_FAILED', 'Bootstrap could not read or parse the app manifest.', { phase: 'LOAD_MANIFEST', category: 'MANIFEST_INVALID' });
+  }
+
+  const readiness = await runAtomicBootstrap({ ...bootstrapOptions, manifestInput, manifestOptions });
+
+  const effectiveManifestOptions = { ...manifestOptions, availableCapabilities: manifestOptions.availableCapabilities ?? APPROVED_CAPABILITIES };
+  const loaded = await loadAppPackage(manifestPath, effectiveManifestOptions, {
+    readText: readManifestText,
+    loadModule,
+    runtimeBinding: readiness.runtime,
+  });
+  if (!loaded.ok) {
+    throw new BootstrapError('BOOTSTRAP_REQUIRED_DEPENDENCY_FAILED', 'Bootstrap could not load the authorized app package.', {
+      phase: 'LOAD_APP_PACKAGE',
+      category: loaded.error.code,
+      correlationId: readiness.correlationId,
+      durationMs: readiness.durationMs,
+    });
+  }
+
+  return Object.freeze({ readiness, appDefinition: loaded.appDefinition, module: loaded.module });
 }

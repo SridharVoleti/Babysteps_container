@@ -47,6 +47,12 @@ export async function validateLaunchContext({ launchContext, manifest, expectedR
   });
 }
 
+// This is the low-level SB-001 primitive (validate the launch context, then invoke a
+// caller-supplied loader) used to test/compose launch-context validation in isolation. It
+// intentionally does NOT run manifest resolution or capability/service setup, so it is not
+// a production app-launch entrypoint. The single mandatory production path is SB-003's
+// bootstrapLearningApp() (src/container/internal/bootstrap/atomic-bootstrap.mjs), which
+// composes this validation with those mandatory gates before any app code can be imported.
 export async function bootstrapAuthorizedLaunch({ loadApp, ...validation }) {
   const runtimeContext = await validateLaunchContext(validation);
   if (typeof loadApp !== 'function') fail('LAUNCH_CONTEXT_INVALID', 'Application loader is unavailable.');

@@ -18,6 +18,8 @@
     "test:capabilities": "node --test tests/capabilities/*.test.mjs",
     "test:extensions": "node --test tests/extensions/*.test.mjs",
     "test:launch-context": "node --test tests/bootstrap/sb-001-authorized-launch-context.test.mjs",
+    "test:launch-verifier": "node --test tests/bootstrap/sb-001-babysteps-launch-verifier.test.mjs",
+    "test:bootstrap-learning-app": "node --test tests/bootstrap/sb-003-bootstrap-learning-app.test.mjs",
     "test:runtime-binding": "node --test tests/runtime/sb-002-runtime-context-binding.test.mjs",
     "test:atomic-bootstrap": "node --test tests/bootstrap/sb-003-atomic-bootstrap.test.mjs",
     "test:api-client": "node --test tests/api/api-001-babysteps-api-client.test.mjs",

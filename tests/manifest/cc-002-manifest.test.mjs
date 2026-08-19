@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolveManifest, validateManifest } from '../../src/container/internal/manifest/index.mjs';
 import { loadAppPackage } from '../../src/container/internal/manifest/load-app-package.mjs';
+import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
 
 const base = {
   appId: 'magical-math',
@@ -19,11 +20,16 @@ const options = {
   approvedExtensionPoints: ['activity-renderer']
 };
 
+function boundRuntimeFor(appId) {
+  return bindAuthorizedRuntime({ learnerId: 'learner-1', appId, releaseId: 'release-1', sessionId: 'session-1' });
+}
+
 test('CC-002-AC01 valid minimal manifest resolves defaults and entry point may load', async () => {
   let loaded = false;
   const result = await loadAppPackage('/tmp/app.manifest.json', options, {
     readText: async () => JSON.stringify(base),
-    loadModule: async () => { loaded = true; return { default: Object.freeze({ id: 'magical-math' }), start: () => true }; }
+    loadModule: async () => { loaded = true; return { default: Object.freeze({ id: 'magical-math' }), start: () => true }; },
+    runtimeBinding: boundRuntimeFor('magical-math'),
   });
   assert.equal(result.ok, true);
   assert.equal(result.appDefinition.id, 'magical-math');
@@ -37,7 +43,8 @@ test('CC-002-AC02 missing/malformed required field is rejected before app code',
   let loaded = false;
   const result = await loadAppPackage('/tmp/app.manifest.json', options, {
     readText: async () => JSON.stringify({ ...base, appId: '' }),
-    loadModule: async () => { loaded = true; return {}; }
+    loadModule: async () => { loaded = true; return {}; },
+    runtimeBinding: boundRuntimeFor('magical-math'),
   });
   assert.equal(result.ok, false);
   assert.equal(result.error.code, 'MANIFEST_INVALID');

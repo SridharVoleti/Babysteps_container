@@ -72,6 +72,8 @@ jobs:
       - run: npm ci
       - name: Run SB-001 launch-context acceptance tests
         run: npm run test:launch-context
+      - name: Run SB-001 production launch-verifier tests
+        run: npm run test:launch-verifier
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
 
@@ -98,6 +100,8 @@ jobs:
       - run: npm ci
       - name: Run SB-003 atomic bootstrap acceptance tests
         run: npm run test:atomic-bootstrap
+      - name: Run SB-003 mandatory bootstrapLearningApp entrypoint tests
+        run: npm run test:bootstrap-learning-app
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
 
