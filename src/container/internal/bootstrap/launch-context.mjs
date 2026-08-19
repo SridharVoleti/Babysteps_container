@@ -31,8 +31,10 @@ export async function validateLaunchContext({ launchContext, manifest, expectedR
   if (current >= expiresAt) fail('LAUNCH_CONTEXT_EXPIRED', 'Authorized launch context has expired.');
 
   if (!manifest || claims.appId !== manifest.appId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized app does not match resolved application.');
-  if (expectedReleaseId && claims.releaseId !== expectedReleaseId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized release does not match resolved release.');
-  if (expectedSessionId && claims.sessionId !== expectedSessionId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized session does not match expected session.');
+  if (!nonEmptyString(expectedReleaseId)) fail('LAUNCH_CONTEXT_BINDING_REQUIRED', 'An expected release binding is required to validate an authorized launch context.');
+  if (!nonEmptyString(expectedSessionId)) fail('LAUNCH_CONTEXT_BINDING_REQUIRED', 'An expected session binding is required to validate an authorized launch context.');
+  if (claims.releaseId !== expectedReleaseId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized release does not match resolved release.');
+  if (claims.sessionId !== expectedSessionId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized session does not match expected session.');
 
   return Object.freeze({
     learnerId: claims.learnerId,

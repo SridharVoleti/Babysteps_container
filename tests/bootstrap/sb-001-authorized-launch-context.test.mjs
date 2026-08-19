@@ -43,6 +43,28 @@ test('SB-001-AC06 substituted release is rejected', async () => {
   await assert.rejects(() => validateLaunchContext({ launchContext: envelope(), ...opts, expectedReleaseId: 'release-2' }), e => e.code === 'LAUNCH_CONTEXT_MISMATCH');
 });
 
+test('SB-001-AC12 substituted session is rejected', async () => {
+  await assert.rejects(() => validateLaunchContext({ launchContext: envelope(), ...opts, expectedSessionId: 'session-2' }), e => e.code === 'LAUNCH_CONTEXT_MISMATCH');
+});
+
+test('SB-001-AC12 an omitted expected release binding fails closed rather than skipping the check', async () => {
+  const { expectedReleaseId, ...withoutRelease } = opts;
+  void expectedReleaseId;
+  await assert.rejects(
+    () => validateLaunchContext({ launchContext: envelope(), ...withoutRelease }),
+    (e) => e instanceof LaunchContextError && e.code === 'LAUNCH_CONTEXT_BINDING_REQUIRED'
+  );
+});
+
+test('SB-001-AC12 an omitted expected session binding fails closed rather than skipping the check', async () => {
+  const { expectedSessionId, ...withoutSession } = opts;
+  void expectedSessionId;
+  await assert.rejects(
+    () => validateLaunchContext({ launchContext: envelope(), ...withoutSession }),
+    (e) => e instanceof LaunchContextError && e.code === 'LAUNCH_CONTEXT_BINDING_REQUIRED'
+  );
+});
+
 test('SB-001-AC07 modified learner/session identifiers do not become authorized', async () => {
   const bad = envelope(); bad.claims.sessionId = 'session-evil';
   await assert.rejects(() => validateLaunchContext({ launchContext: bad, ...opts }), e => e.code === 'LAUNCH_CONTEXT_INVALID');
