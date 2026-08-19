@@ -17,6 +17,11 @@ const RULES = [
     test: (source) => /(?:fetch|axios\.(?:get|post|put|patch|delete))\s*\([^\n]*(?:api\.)?babysteps[^\n]*(?:\/internal\/|\/private\/|\/billing(?:\/|['"]))/i.test(source),
   },
   {
+    code: 'DIRECT_BABYSTEPS_API_CALL',
+    message: 'Learning apps must not call Babysteps Platform APIs directly; use the centralized Babysteps API client via container capabilities.',
+    test: (source) => /(?:fetch|axios(?:\.(?:get|post|put|patch|delete))?)\s*\([^\n]*babysteps/i.test(source),
+  },
+  {
     code: 'PLATFORM_AUTHORITY_REIMPLEMENTATION',
     message: 'Identity, entitlement, subscription, session/credit authority and progress persistence remain platform/container owned.',
     test: (source) => /\b(?:function|const|let|var)\s+(?:decide|determine|validate|check|calculate|compute)(?:LearnerOwnership|Entitlement|Subscription|SessionEligibility|SessionCredit|CreditEligibility)\b/i.test(source),

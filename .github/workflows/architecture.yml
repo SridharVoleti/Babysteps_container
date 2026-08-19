@@ -91,3 +91,15 @@ jobs:
         run: npm run test:atomic-bootstrap
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  api-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run API-001 Babysteps API client acceptance tests
+        run: npm run test:api-client
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
