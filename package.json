@@ -13,6 +13,7 @@
     "test:runtime-binding": "node --test tests/runtime/sb-002-runtime-context-binding.test.mjs",
     "test:atomic-bootstrap": "node --test tests/bootstrap/sb-003-atomic-bootstrap.test.mjs",
     "test:api-client": "node --test tests/api/api-001-babysteps-api-client.test.mjs",
+    "test:auth-context": "node --test tests/api/api-002-authenticated-request-context.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps"
   },

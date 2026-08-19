@@ -103,3 +103,15 @@ jobs:
         run: npm run test:api-client
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  api-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run API-002 authenticated request context acceptance tests
+        run: npm run test:auth-context
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
