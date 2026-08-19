@@ -74,9 +74,14 @@ test('SP-001-AC05 contacts/camera/location/files requests are denied and cannot 
 
 test('SP-001-AC06 an arbitrary external URL/deep link/popup/new browser context is blocked unless explicitly approved', async () => {
   const binding = await boundRuntime();
-  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding, approvedNavigationDestinations: ['babysteps-help-center'] });
+  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding });
   assert.throws(() => policy.guardNavigation('arbitrary-external-site'), (e) => e.code === 'NAVIGATION_BLOCKED');
   assert.doesNotThrow(() => policy.guardNavigation('babysteps-help-center'));
+
+  // A caller cannot self-approve a new destination class - createLearnerSafetyPolicy no
+  // longer accepts an approvedNavigationDestinations parameter at all.
+  const forged = createLearnerSafetyPolicy({ runtimeBinding: binding, approvedNavigationDestinations: ['arbitrary-external-site'] });
+  assert.throws(() => forged.guardNavigation('arbitrary-external-site'), (e) => e.code === 'NAVIGATION_BLOCKED');
   const violation = inspectSource('apps/demo/popup.mjs', "window.open('https://example.com');");
   assert.ok(violation.some((v) => v.code === 'UNRESTRICTED_EXTERNAL_NAVIGATION'));
 });

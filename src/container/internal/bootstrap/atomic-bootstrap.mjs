@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { APPROVED_CAPABILITIES, createCapabilityFacade } from '../capabilities/index.mjs';
 import { isApprovedDegradedCapability } from '../governance/degraded-capability-policy-registry.mjs';
+import { applyClosedRuntimeLockdown } from '../safety/runtime-lockdown.mjs';
 import { resolveManifest } from '../manifest/index.mjs';
 import { loadAppPackage } from '../manifest/load-app-package.mjs';
 import { validateLaunchContext, LaunchContextError } from './launch-context.mjs';
@@ -171,6 +172,12 @@ export async function bootstrapLearningApp({
   manifestOptions = {},
   readManifestText = (path) => readFile(path, 'utf8'),
   loadModule,
+  // CC-003/SP-001/SP-003-P0: structural closed-runtime lockdown (real network/device-
+  // capability/navigation primitive denial - see safety/runtime-lockdown.mjs), applied to
+  // the real global object by default immediately before any app code is ever imported.
+  // Only test/dev callers should ever disable or retarget this.
+  enforceClosedRuntime = true,
+  lockdownTarget = globalThis,
   ...bootstrapOptions
 }) {
   if (typeof manifestPath !== 'string' || manifestPath.trim() === '') {
@@ -185,6 +192,10 @@ export async function bootstrapLearningApp({
   }
 
   const readiness = await runAtomicBootstrap({ ...bootstrapOptions, manifestInput, manifestOptions });
+
+  if (enforceClosedRuntime) {
+    applyClosedRuntimeLockdown(lockdownTarget);
+  }
 
   const effectiveManifestOptions = { ...manifestOptions, availableCapabilities: manifestOptions.availableCapabilities ?? APPROVED_CAPABILITIES };
   const loaded = await loadAppPackage(manifestPath, effectiveManifestOptions, {
