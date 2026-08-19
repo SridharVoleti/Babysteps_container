@@ -1,4 +1,9 @@
-const APPROVED_CAPABILITY_NAMES = new Set(['progress', 'audio']);
+// CC-002/CC-003/AM-002/TC-003: the single authoritative registry of manifest-declarable
+// app capability names. Manifest validation/resolution (CC-002), the runtime capability
+// facade and TC-003 conformance applicability all import this set so they can never drift
+// from one another - a capability is either approved here, or it does not exist anywhere
+// in the system.
+const APPROVED_CAPABILITY_NAMES = new Set(['progress', 'audio', 'narration']);
 
 export class CapabilityError extends Error {
   constructor(code, message, metadata = {}) {
