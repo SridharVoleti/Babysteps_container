@@ -115,3 +115,15 @@ jobs:
         run: npm run test:auth-context
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
+
+  api-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Run API-003 contract validation acceptance tests
+        run: npm run test:contract-validation
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
