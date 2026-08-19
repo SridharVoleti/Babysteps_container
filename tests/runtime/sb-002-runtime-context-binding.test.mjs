@@ -76,7 +76,7 @@ test('SB-002-AC06 extension receives only read-only runtime context and cannot m
   const binding = await boundRuntime();
   const runtimeContext = getRuntimeContext(binding);
   const manifestWithExtension = Object.freeze({ appId: 'magical-math', extensionPoints: ['activity-renderer'] });
-  const manager = createExtensionManager({ manifest: manifestWithExtension, approvedExtensionContracts: { 'activity-renderer': ['1.0'] }, runtimeContext });
+  const manager = createExtensionManager({ manifest: manifestWithExtension, runtimeContext });
 
   let received;
   await manager.register({

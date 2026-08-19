@@ -1,10 +1,15 @@
+import { isApprovedExtensionType, isSupportedExtensionVersion } from '../governance/extension-registry.mjs';
+
 export class ExtensionError extends Error {
   constructor(code, message) { super(message); this.name = 'ExtensionError'; this.code = code; Object.freeze(this); }
 }
 
 function fail(code, message) { throw new ExtensionError(code, message); }
 
-export function createExtensionManager({ manifest, approvedExtensionContracts = {}, runtimeContext = undefined }) {
+// approvedExtensionContracts is intentionally not a caller-supplied parameter: approval
+// and supported-version authority live only in the container-owned governance registry
+// (CC-004), so no caller/app can supply or override which extension types/versions pass.
+export function createExtensionManager({ manifest, runtimeContext = undefined }) {
   const active = new Map();
   const declared = new Set(manifest?.extensionPoints ?? []);
 
@@ -13,10 +18,10 @@ export function createExtensionManager({ manifest, approvedExtensionContracts = 
       if (!extension || typeof extension !== 'object' || !extension.id || !extension.type || !extension.version || typeof extension.initialize !== 'function') {
         fail('EXTENSION_INVALID', 'Extension registration is invalid.');
       }
-      if (!declared.has(extension.type) || !(extension.type in approvedExtensionContracts)) {
+      if (!declared.has(extension.type) || !isApprovedExtensionType(extension.type)) {
         fail('EXTENSION_NOT_APPROVED', 'Extension type is not approved for this app.');
       }
-      if (!(approvedExtensionContracts[extension.type] ?? []).includes(extension.version)) {
+      if (!isSupportedExtensionVersion(extension.type, extension.version)) {
         fail('EXTENSION_VERSION_UNSUPPORTED', 'Extension contract version is unsupported.');
       }
       const key = `${extension.type}:${extension.id}`;
