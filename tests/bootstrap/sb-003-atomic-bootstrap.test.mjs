@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { runAtomicBootstrap, bootstrapReadyApp, BootstrapError } from '../../src/container/internal/bootstrap/atomic-bootstrap.mjs';
 import { RuntimeBindingError } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
 
@@ -160,6 +160,29 @@ test('SB-003-AC10 retried initialization leaves no duplicate event handlers/list
   const readiness = await runAtomicBootstrap(options);
   assert.equal(readiness.ok, true);
   assert.equal(activeListeners, 1);
+});
+
+test('SB-001-P0 the mandatory bootstrap path uses the production Babysteps verifier by default when none is supplied', async (t) => {
+  const key = 'e'.repeat(32);
+  const priorKey = process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
+  process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = key;
+  t.after(() => {
+    if (priorKey === undefined) delete process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
+    else process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = priorKey;
+  });
+
+  const sign = (claims) => createHmac('sha256', key).update(JSON.stringify(claims, Object.keys(claims).sort())).digest('hex');
+  const productionEnvelope = { claims: structuredClone(baseClaims), proof: sign(baseClaims) };
+
+  const { verifier: _ignoredTestVerifier, ...launchOptionsWithoutVerifier } = launchOptions;
+  void _ignoredTestVerifier;
+
+  const readiness = await runAtomicBootstrap(baseOptions({
+    launchContext: productionEnvelope,
+    launchOptions: launchOptionsWithoutVerifier,
+    approvedFallbacks: { audio: {} },
+  }));
+  assert.equal(readiness.ok, true);
 });
 
 test('SB-003-AC11 bootstrap failure telemetry identifies phase/category without exposing learner data', async () => {

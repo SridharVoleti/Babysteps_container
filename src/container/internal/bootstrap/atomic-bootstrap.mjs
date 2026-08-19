@@ -1,7 +1,21 @@
 import { APPROVED_CAPABILITIES, createCapabilityFacade } from '../capabilities/index.mjs';
 import { resolveManifest } from '../manifest/index.mjs';
 import { validateLaunchContext, LaunchContextError } from './launch-context.mjs';
+import { createBabystepsLaunchVerifier, LaunchVerifierError } from './babysteps-launch-verifier.mjs';
 import { bindAuthorizedRuntime, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
+
+// Lazily constructed so importing this module never requires the production verification
+// key to be configured (test/dev callers always supply their own launchOptions.verifier).
+let defaultProductionVerifier = null;
+function resolveDefaultVerifier(env = process.env) {
+  if (!defaultProductionVerifier) {
+    defaultProductionVerifier = createBabystepsLaunchVerifier({
+      verificationKey: env.BABYSTEPS_LAUNCH_VERIFICATION_KEY,
+      previousVerificationKeys: (env.BABYSTEPS_LAUNCH_VERIFICATION_KEYS_PREVIOUS ?? '').split(',').map((k) => k.trim()).filter(Boolean),
+    });
+  }
+  return defaultProductionVerifier;
+}
 
 export class BootstrapError extends Error {
   constructor(code, message, { phase, ...metadata } = {}) {
@@ -53,9 +67,12 @@ export async function runAtomicBootstrap({
 
   let runtimeContext;
   try {
-    runtimeContext = await validateLaunchContext({ launchContext, manifest, ...launchOptions });
+    const verifier = launchOptions.verifier ?? resolveDefaultVerifier();
+    runtimeContext = await validateLaunchContext({ launchContext, manifest, ...launchOptions, verifier });
   } catch (error) {
-    const category = error instanceof LaunchContextError ? error.code : 'LAUNCH_CONTEXT_INVALID';
+    const category = error instanceof LaunchContextError ? error.code
+      : error instanceof LaunchVerifierError ? error.code
+      : 'LAUNCH_CONTEXT_INVALID';
     fail('BOOTSTRAP_REQUIRED_DEPENDENCY_FAILED', 'Bootstrap could not validate the authorized launch context.', { phase: 'VALIDATE_LAUNCH', category });
   }
   correlationId = runtimeContext.correlationId;
