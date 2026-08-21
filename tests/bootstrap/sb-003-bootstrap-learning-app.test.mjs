@@ -98,6 +98,28 @@ test('SB-001-P0 an app module whose identity does not match the authorized manif
   );
 });
 
+test('CC-003/SP-001/SP-003-P0 bootstrapLearningApp applies the structural closed-runtime lockdown before app code ever imports', async () => {
+  const { loadModule } = loadModuleTracker();
+  const lockdownTarget = {
+    fetch: () => 'real-fetch',
+    open: () => 'real-open',
+    navigator: { mediaDevices: {}, geolocation: { getCurrentPosition: () => {} } },
+  };
+  let observedAtImportTime = null;
+  const observingLoadModule = async () => {
+    observedAtImportTime = {
+      fetchDenied: (() => { try { lockdownTarget.fetch(); return false; } catch { return true; } })(),
+      geolocationDenied: lockdownTarget.navigator.geolocation === undefined,
+    };
+    return loadModule();
+  };
+
+  const { readiness } = await bootstrapLearningApp({ ...baseOptions(), loadModule: observingLoadModule, lockdownTarget });
+  assert.equal(readiness.ok, true);
+  assert.equal(observedAtImportTime.fetchDenied, true);
+  assert.equal(observedAtImportTime.geolocationDenied, true);
+});
+
 test('SB-001-P0 loadAppPackage cannot be reached to import app code without an authorized runtime binding, even if called directly', async () => {
   const { loadAppPackage } = await import('../../src/container/internal/manifest/load-app-package.mjs');
   let executed = false;

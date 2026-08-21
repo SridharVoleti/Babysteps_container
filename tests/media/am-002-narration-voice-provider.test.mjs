@@ -4,7 +4,8 @@ import { createHash } from 'node:crypto';
 import { validateLaunchContext } from '../../src/container/internal/bootstrap/launch-context.mjs';
 import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
 import { createAudioRuntime } from '../../src/container/internal/media/audio-runtime.mjs';
-import { createNarrationVoiceProvider, NarrationVoiceError } from '../../src/container/internal/media/narration-voice-provider.mjs';
+import { createNarrationVoiceProvider, createProductionNarrationVoiceProvider, NarrationVoiceError } from '../../src/container/internal/media/narration-voice-provider.mjs';
+import { VOICE_PACKAGE_REGISTRY } from '../../src/container/internal/governance/voice-package-registry.mjs';
 
 const baseClaims = Object.freeze({
   learnerId: 'learner-1', appId: 'magical-math', releaseId: 'release-1', sessionId: 'session-1',
@@ -136,6 +137,26 @@ test('AM-002-AC10 only coarse voice package/version/lifecycle telemetry is emitt
   }
 });
 
+test('AM-002-P1 telemetry never includes a raw voice-engine/synthesis exception message', async () => {
+  const events = [];
+  const loadFailure = await harness({
+    onTelemetry: (e) => events.push(e),
+    loadVoiceEngine: async () => { throw new Error('leaked-narration-transcript-load-failure'); },
+  });
+  await assert.rejects(() => loadFailure.provider.narrate('Text'));
+
+  const synthesisFailure = await harness({
+    onTelemetry: (e) => events.push(e),
+    synthesize: async () => { throw new Error('leaked-narration-transcript-synthesis-failure'); },
+  });
+  await assert.rejects(() => synthesisFailure.provider.narrate('Text'));
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-narration-transcript'), false);
+  }
+});
+
 test('AM-002-AC11 a fallback voice is used only when explicitly approved, never an arbitrary local selection', async () => {
   const { provider } = await harness({
     loadVoiceEngine: async (pkg) => { if (pkg.id === 'babysteps-standard-voice') throw new Error('missing'); return { pkg }; },
@@ -143,4 +164,41 @@ test('AM-002-AC11 a fallback voice is used only when explicitly approved, never 
   });
   const result = await provider.narrate('Text');
   assert.equal(result.voiceId, 'accessibility-fallback');
+});
+
+test('AM-002-P1 production narration resolves the primary/fallback voice packages from the trusted PK-003-keyed registry, not caller input', async () => {
+  const binding = await boundRuntime();
+  const audioRuntime = createAudioRuntime({ runtimeBinding: binding, playerFactory });
+  const registryEntry = VOICE_PACKAGE_REGISTRY['1.0.0'];
+
+  const provider = createProductionNarrationVoiceProvider({
+    runtimeBinding: binding,
+    audioRuntime,
+    releaseComposition: { voicePackageVersion: '1.0.0' },
+  });
+  const result = await provider.narrate('Great job!');
+  assert.equal(result.voiceId, registryEntry.voicePackage.id);
+  assert.equal(result.voiceVersion, registryEntry.voicePackage.version);
+});
+
+test('AM-002-P1 an unregistered/forged voicePackageVersion is rejected instead of falling back to caller-supplied packages', async () => {
+  const binding = await boundRuntime();
+  const audioRuntime = createAudioRuntime({ runtimeBinding: binding, playerFactory });
+
+  assert.throws(
+    () => createProductionNarrationVoiceProvider({
+      runtimeBinding: binding,
+      audioRuntime,
+      releaseComposition: { voicePackageVersion: 'forged-9.9.9' },
+      // Even if a caller tried to smuggle a package in, createProductionNarrationVoiceProvider
+      // never reads voicePackage/approvedFallbackVoices from its own arguments.
+      voicePackage: { id: 'attacker-voice', version: '1.0.0' },
+    }),
+    (e) => e instanceof NarrationVoiceError && e.code === 'NARRATION_VOICE_UNAVAILABLE'
+  );
+
+  assert.throws(
+    () => createProductionNarrationVoiceProvider({ runtimeBinding: binding, audioRuntime, releaseComposition: null }),
+    (e) => e instanceof NarrationVoiceError && e.code === 'NARRATION_VOICE_UNAVAILABLE'
+  );
 });

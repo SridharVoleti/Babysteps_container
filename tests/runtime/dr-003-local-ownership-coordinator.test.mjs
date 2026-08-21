@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { validateLaunchContext } from '../../src/container/internal/bootstrap/launch-context.mjs';
 import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
-import { createLocalOwnershipCoordinator, createInMemoryLockAdapter, LocalOwnershipError } from '../../src/container/internal/runtime/local-ownership-coordinator.mjs';
+import {
+  createLocalOwnershipCoordinator,
+  createInMemoryLockAdapter,
+  createWebLocksAdapter,
+  createBroadcastLockAdapter,
+  LocalOwnershipError,
+} from '../../src/container/internal/runtime/local-ownership-coordinator.mjs';
 
 const baseClaims = Object.freeze({
   learnerId: 'learner-1', appId: 'magical-math', releaseId: 'release-1', sessionId: 'session-1',
@@ -130,9 +136,87 @@ test('DR-003-AC08 a missing preferred lock primitive uses a tested fallback or f
   const result = await withFallback.acquire();
   assert.equal(result.owning, true);
 
+  // When genuinely no coordination primitive is available at all (neither Web Locks,
+  // BroadcastChannel, nor an approved fallback), acquisition fails safely rather than
+  // silently granting ownership.
   const bindingNoAdapters = await boundRuntime({ ...baseClaims, sessionId: 'session-no-adapters' });
-  const withoutAnyAdapter = createLocalOwnershipCoordinator({ runtimeBinding: bindingNoAdapters });
+  const withoutAnyAdapter = createLocalOwnershipCoordinator({ runtimeBinding: bindingNoAdapters, lockAdapter: null, fallbackLockAdapter: null });
   await assert.rejects(() => withoutAnyAdapter.acquire(), (e) => e.code === 'LOCAL_OWNERSHIP_UNAVAILABLE');
+});
+
+test('DR-003-P0 by default (no explicit adapter supplied), two independently-constructed coordinators genuinely exclude each other via a real cross-context primitive, not shared process memory', async () => {
+  const bindingA = await boundRuntime({ ...baseClaims, sessionId: 'session-default-a' });
+  const bindingB = await boundRuntime({ ...baseClaims, sessionId: 'session-default-a' });
+  // Neither lockAdapter nor fallbackLockAdapter is passed - each coordinator resolves its
+  // own real primitive independently, exactly as two separate real browser tabs would.
+  const tabA = createLocalOwnershipCoordinator({ runtimeBinding: bindingA });
+  const tabB = createLocalOwnershipCoordinator({ runtimeBinding: bindingB });
+
+  const first = await tabA.acquire();
+  assert.equal(first.owning, true);
+  await assert.rejects(() => tabB.acquire(), (e) => e instanceof LocalOwnershipError && e.code === 'LOCAL_RUNTIME_ALREADY_ACTIVE');
+
+  tabA.release('TAB_CLOSED');
+  const second = await tabB.acquire();
+  assert.equal(second.owning, true);
+  tabB.release('TAB_CLOSED');
+});
+
+test('DR-003-P0 createWebLocksAdapter() correctly acquires, holds and releases against the Web Locks contract', async () => {
+  const held = new Map();
+  const fakeLocks = {
+    request: (name, options, callback) => {
+      if (held.has(name)) {
+        return Promise.resolve(callback(null));
+      }
+      held.set(name, true);
+      const lockPromise = callback({ name }).finally(() => held.delete(name));
+      return lockPromise;
+    },
+  };
+  const adapter = createWebLocksAdapter({ locks: fakeLocks });
+  assert.equal(typeof adapter, 'function');
+
+  const lease = await adapter('ownership-key-1');
+  assert.ok(lease);
+  assert.equal(typeof lease.release, 'function');
+
+  // A second acquire attempt for the same key while held is unavailable.
+  const blocked = await adapter('ownership-key-1');
+  assert.equal(blocked, null);
+
+  lease.release();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const reacquired = await adapter('ownership-key-1');
+  assert.ok(reacquired);
+  reacquired.release();
+});
+
+test('DR-003-P0 createWebLocksAdapter() is unavailable (returns null) when Web Locks does not exist', () => {
+  assert.equal(createWebLocksAdapter({ locks: undefined }), null);
+});
+
+test('DR-003-P0 createBroadcastLockAdapter() coordinates two independent instances via a real message-bus primitive, and independent keys do not block each other', async () => {
+  const adapterA = createBroadcastLockAdapter();
+  const adapterB = createBroadcastLockAdapter();
+  assert.equal(typeof adapterA, 'function');
+  assert.equal(typeof adapterB, 'function');
+
+  const leaseA = await adapterA('broadcast-key-1');
+  assert.ok(leaseA);
+  const blockedB = await adapterB('broadcast-key-1');
+  assert.equal(blockedB, null);
+
+  // A different key is entirely independent.
+  const otherKeyLease = await adapterB('broadcast-key-2');
+  assert.ok(otherKeyLease);
+
+  leaseA.release();
+  otherKeyLease.release();
+
+  const nowAvailable = await adapterB('broadcast-key-1');
+  assert.ok(nowAvailable);
+  nowAvailable.release();
 });
 
 test('DR-003-AC09 local ownership does not override an authoritative session-inactive result', async () => {

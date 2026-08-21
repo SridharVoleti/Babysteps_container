@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
 import { scopeAuthorityRequest, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
+import { createRetryPolicy } from '../runtime/connectivity-service.mjs';
 
 const AUTHORITY_FIELDS = ['learnerId', 'appId', 'releaseId', 'sessionId'];
 
@@ -25,35 +25,32 @@ function categorizeStatus(status) {
 function withTimeout(promise, timeoutMs) {
   let timer;
   const timeout = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(Object.assign(new Error('Babysteps platform request timed out.'), { isTimeout: true })), timeoutMs);
+    timer = setTimeout(() => reject(new ApiClientError('API_REQUEST_TIMEOUT', 'Babysteps platform request timed out.', { category: 'TIMEOUT' })), timeoutMs);
   });
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function sendWithPolicy(transport, requestEnvelope, operation) {
-  const maxAttempts = Math.max(1, operation.retry?.maxAttempts ?? 1);
+// ER-002-P1: transport retry/backoff/failure-classification has exactly one implementation
+// in production runtime - ER-002's createRetryPolicy/classifyRetry (connectivity-service.mjs).
+// This module has no competing retry loop of its own; it only decides per-call timeout and
+// whether an operation is retryable at all. `inFlightKey` is unique per call (not just per
+// operation name) so unrelated concurrent calls to the same operation are never coalesced
+// into one shared attempt by the policy's in-flight dedup - only repeated attempts of the
+// very same call join the same retry loop.
+async function sendWithPolicy(transport, requestEnvelope, operation, retryPolicy, inFlightKey) {
   const timeoutMs = operation.retry?.timeoutMs ?? 5000;
-  const retryableStatuses = new Set(operation.retry?.retryableStatuses ?? []);
+  const retryable = Boolean(operation.retry);
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    let response;
-    try {
-      response = await withTimeout(transport(requestEnvelope), timeoutMs);
-    } catch {
-      if (attempt < maxAttempts) continue;
-      throw new ApiClientError('API_REQUEST_TIMEOUT', 'Babysteps platform request timed out.', { category: 'TIMEOUT' });
-    }
-
+  async function attempt() {
+    const response = await withTimeout(transport(requestEnvelope), timeoutMs);
     if (response.status >= 400) {
-      if (retryableStatuses.has(response.status) && attempt < maxAttempts) continue;
       const category = categorizeStatus(response.status);
       throw new ApiClientError(`API_${category}_ERROR`, 'Babysteps platform returned an error response.', { category, status: response.status });
     }
-
     return response;
   }
 
-  throw new ApiClientError('API_REQUEST_TIMEOUT', 'Babysteps platform request timed out.', { category: 'TIMEOUT' });
+  return retryPolicy.executeWithRetry({ operation: inFlightKey, retryable }, attempt);
 }
 
 export function createBabystepsApiClient({
@@ -65,6 +62,11 @@ export function createBabystepsApiClient({
   operations,
   onTelemetry = () => {},
   clock = () => Date.now(),
+  // ER-002-P1: the single authoritative transport retry policy this client delegates to.
+  // A caller may inject its own (e.g. to share one policy/teardown across several
+  // container services), but by default each client owns a private instance so unrelated
+  // clients never dedupe/coalesce each other's in-flight attempts.
+  retryPolicy = createRetryPolicy({ sleep: () => Promise.resolve() }),
 }) {
   if (typeof transport !== 'function') throw new TypeError('A transport function is required to create the Babysteps API client.');
   if (typeof authProvider !== 'function') throw new TypeError('An authProvider function is required to create the Babysteps API client.');
@@ -91,13 +93,22 @@ export function createBabystepsApiClient({
     for (const field of AUTHORITY_FIELDS) delete body[field];
     for (const field of authorityFields) body[field] = scoped[field];
 
-    const requestId = randomUUID();
+    // ER-002/PA-003: X-Request-Id identifies this exact HTTP attempt (always fresh, purely
+    // for tracing). The Idempotency-Key header is the platform's retry identity and must
+    // stay the same across every attempt/retry/recovery of the same logical checkpoint - so
+    // when the caller (e.g. PA-003's recovery adapter) supplies a stable logical
+    // idempotencyKey on the payload, that value becomes the transport header verbatim
+    // instead of a fresh UUID being generated per call.
+    const requestId = crypto.randomUUID();
+    const logicalIdempotencyKey = typeof payload.idempotencyKey === 'string' && payload.idempotencyKey.trim() !== ''
+      ? payload.idempotencyKey
+      : requestId;
     const headers = {
       'X-Babysteps-Contract-Version': contractVersion,
       'X-Request-Id': requestId,
       'X-Correlation-Id': identity.correlationId,
       Authorization: `Bearer ${await authProvider()}`,
-      ...(operation.idempotent ? { 'Idempotency-Key': requestId } : {}),
+      ...(operation.idempotent ? { 'Idempotency-Key': logicalIdempotencyKey } : {}),
     };
 
     const requestEnvelope = Object.freeze({
@@ -118,7 +129,7 @@ export function createBabystepsApiClient({
 
     let response;
     try {
-      response = await sendWithPolicy(transport, requestEnvelope, operation);
+      response = await sendWithPolicy(transport, requestEnvelope, operation, retryPolicy, `${operationName}:${requestId}`);
     } catch (error) {
       emitTelemetry(error instanceof ApiClientError ? error.metadata.category : 'UNKNOWN');
       throw error;

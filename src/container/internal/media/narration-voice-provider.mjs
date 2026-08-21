@@ -1,4 +1,6 @@
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
+import { resolveApprovedNarrationVoice } from '../governance/voice-package-registry.mjs';
+import { sanitizeCause } from '../telemetry/sanitize-cause.mjs';
 
 export class NarrationVoiceError extends Error {
   constructor(code, message, metadata = {}) {
@@ -64,7 +66,7 @@ export function createNarrationVoiceProvider({
       emit('narration_voice_initialized', { reason });
       return engine;
     } catch (error) {
-      emit('narration_voice_load_failed', { reason, cause: error?.message });
+      emit('narration_voice_load_failed', { reason, cause: sanitizeCause(error) });
       return null;
     }
   }
@@ -112,7 +114,7 @@ export function createNarrationVoiceProvider({
         ? await synthesize(text, loadedEngine, options)
         : `narration://${activeVoicePackage.id}@${activeVoicePackage.version}`;
     } catch (error) {
-      emit('narration_synthesis_failed', { cause: error?.message });
+      emit('narration_synthesis_failed', { cause: sanitizeCause(error) });
       fail('NARRATION_SYNTHESIS_FAILED', 'Narration synthesis failed for the requested text.', { cause: error?.message });
     }
 
@@ -125,5 +127,35 @@ export function createNarrationVoiceProvider({
     narrate,
     get activeVoiceId() { return activeVoicePackage.id; },
     get activeVoiceVersion() { return activeVoicePackage.version; },
+  });
+}
+
+// AM-002/PK-003: the only production entry point for narration. Primary/fallback voice
+// packages are resolved from the trusted, version-controlled VOICE_PACKAGE_REGISTRY keyed by
+// the PK-003 release composition's voicePackageVersion - never accepted directly from a
+// caller - so production narration can never be assembled with an arbitrary/forged package.
+export function createProductionNarrationVoiceProvider({
+  runtimeBinding,
+  audioRuntime,
+  releaseComposition,
+  loadVoiceEngine,
+  synthesize,
+  onTelemetry = () => {},
+}) {
+  if (!releaseComposition || !isNonEmptyString(releaseComposition.voicePackageVersion)) {
+    fail('NARRATION_VOICE_UNAVAILABLE', 'A PK-003 release composition with a voicePackageVersion is required to resolve the approved narration voice.');
+  }
+  const approved = resolveApprovedNarrationVoice(releaseComposition.voicePackageVersion);
+  if (!approved) {
+    fail('NARRATION_VOICE_UNAVAILABLE', `No approved narration voice package is registered for voicePackageVersion "${releaseComposition.voicePackageVersion}".`);
+  }
+  return createNarrationVoiceProvider({
+    runtimeBinding,
+    audioRuntime,
+    voicePackage: approved.voicePackage,
+    approvedFallbackVoices: approved.approvedFallbackVoices,
+    loadVoiceEngine,
+    synthesize,
+    onTelemetry,
   });
 }

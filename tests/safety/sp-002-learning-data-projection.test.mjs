@@ -105,6 +105,41 @@ test('SP-002-AC10 repeated bootstrap/restore does not accumulate duplicate perso
   assert.deepEqual(second, third);
 });
 
+test('SP-002-P0 an approved record kind is not approval for an arbitrary/sensitive payload', () => {
+  const backingStore = new Map();
+  const store = createApprovedLocalStore({
+    backingStore: { setItem: (k, v) => backingStore.set(k, v), getItem: (k) => backingStore.get(k), removeItem: (k) => backingStore.delete(k), keys: () => [...backingStore.keys()] },
+  });
+
+  const sensitivePayloads = {
+    'session-state': { lifecycleState: 'ACTIVE', parentEmail: 'parent@example.com' },
+    'progress-checkpoint': { status: 'SAVED', authToken: 'super-secret-token' },
+    'content-version-binding': { appId: 'a', releaseId: 'r', sessionId: 's', contentVersion: 'v1', billingPlan: 'annual-premium' },
+    'pending-progress-recovery': { scope: 'x', appProgress: { adminRole: 'owner' }, metadata: {} },
+  };
+  for (const [kind, value] of Object.entries(sensitivePayloads)) {
+    assert.throws(
+      () => store.write(kind, 'session-1', 'key', value),
+      (e) => e instanceof DataProjectionError && e.code === 'LOCAL_STORAGE_POLICY_VIOLATION',
+      `expected ${kind} to reject a sensitive payload`
+    );
+  }
+  assert.equal(backingStore.size, 0);
+
+  // An unknown field outside the kind's approved schema is rejected even when it looks benign.
+  assert.throws(
+    () => store.write('session-state', 'session-1', 'key', { unexpectedField: 'anything' }),
+    (e) => e instanceof DataProjectionError && e.code === 'LOCAL_STORAGE_POLICY_VIOLATION'
+  );
+
+  // Fields required by each kind's frozen contract remain writable.
+  store.write('session-state', 'session-1', 'current', { lifecycleState: 'ACTIVE', connectedMs: 1200 });
+  store.write('progress-checkpoint', 'session-1', 'latest', { status: 'SAVED', sequence: 3 });
+  store.write('content-version-binding', 'session-1', 'binding', { appId: 'a', releaseId: 'r', sessionId: 'session-1', contentVersion: 'v1', integrity: null });
+  store.write('pending-progress-recovery', 'session-1', 'pending', { scope: 'x', idempotencyKey: 'key-1', appProgress: { score: 3 }, metadata: {} });
+  assert.equal(backingStore.size, 4);
+});
+
 test('SP-002-AC11 only coarse violation-category telemetry is emitted, without raw sensitive fields', () => {
   const events = [];
   const backingStore = new Map();

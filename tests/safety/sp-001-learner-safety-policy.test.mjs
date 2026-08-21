@@ -74,9 +74,14 @@ test('SP-001-AC05 contacts/camera/location/files requests are denied and cannot 
 
 test('SP-001-AC06 an arbitrary external URL/deep link/popup/new browser context is blocked unless explicitly approved', async () => {
   const binding = await boundRuntime();
-  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding, approvedNavigationDestinations: ['babysteps-help-center'] });
+  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding });
   assert.throws(() => policy.guardNavigation('arbitrary-external-site'), (e) => e.code === 'NAVIGATION_BLOCKED');
   assert.doesNotThrow(() => policy.guardNavigation('babysteps-help-center'));
+
+  // A caller cannot self-approve a new destination class - createLearnerSafetyPolicy no
+  // longer accepts an approvedNavigationDestinations parameter at all.
+  const forged = createLearnerSafetyPolicy({ runtimeBinding: binding, approvedNavigationDestinations: ['arbitrary-external-site'] });
+  assert.throws(() => forged.guardNavigation('arbitrary-external-site'), (e) => e.code === 'NAVIGATION_BLOCKED');
   const violation = inspectSource('apps/demo/popup.mjs', "window.open('https://example.com');");
   assert.ok(violation.some((v) => v.code === 'UNRESTRICTED_EXTERNAL_NAVIGATION'));
 });
@@ -124,5 +129,18 @@ test('SP-001-AC11 only coarse policy/capability/purpose telemetry is emitted, wi
     const keys = Object.keys(event);
     assert.ok(keys.every((k) => ['event', 'appId', 'correlationId', 'capability', 'status', 'purposeId', 'behavior', 'destinationClass', 'cause'].includes(k)));
     assert.equal(JSON.stringify(event).includes('contactsSnapshot'), false);
+  }
+});
+
+test('SP-001-P1 telemetry never includes a raw notification-adapter exception message', async () => {
+  const binding = await boundRuntime();
+  const events = [];
+  const notificationAdapter = { register: async () => { throw new Error('leaked-notification-payload-detail'); } };
+  const policy = createLearnerSafetyPolicy({ runtimeBinding: binding, notificationAdapter, onTelemetry: (e) => events.push(e) });
+  const result = await policy.registerNotification('session-reminder-30-min', {});
+  assert.equal(result.registered, false);
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-notification-payload-detail'), false);
   }
 });

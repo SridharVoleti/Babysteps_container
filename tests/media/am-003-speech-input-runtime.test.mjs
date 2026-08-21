@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { validateLaunchContext } from '../../src/container/internal/bootstrap/launch-context.mjs';
 import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
 import { createActivityLifecycleManager } from '../../src/container/internal/activities/activity-lifecycle-manager.mjs';
-import { createSpeechInputRuntime, SpeechInputError } from '../../src/container/internal/media/speech-input-runtime.mjs';
+import { createSpeechInputRuntime, createProductionSpeechInputRuntime, SpeechInputError } from '../../src/container/internal/media/speech-input-runtime.mjs';
 
 const baseClaims = Object.freeze({
   learnerId: 'learner-1', appId: 'magical-math', releaseId: 'release-1', sessionId: 'session-1',
@@ -180,5 +180,72 @@ test('AM-003-AC11 only coarse technical speech telemetry is emitted, not raw aud
     assert.equal(JSON.stringify(event).includes('the secret transcript text'), false);
     const keys = Object.keys(event);
     assert.ok(keys.every((k) => ['event', 'appId', 'correlationId', 'handleId', 'generation', 'reason', 'cause', 'kind'].includes(k)));
+  }
+});
+
+test('AM-003-P1 telemetry never includes a raw permission/recognizer/recognition exception message', async () => {
+  const binding = await boundRuntime();
+  const events = [];
+
+  const permissionFailure = createSpeechInputRuntime({
+    runtimeBinding: binding, recognizerFactory: fakeRecognizerFactory(), onTelemetry: (e) => events.push(e),
+    requestPermission: async () => { throw new Error('leaked-transcript-permission-failure'); },
+  });
+  await assert.rejects(() => permissionFailure.startListening({}));
+
+  const recognizerCreationFailure = createSpeechInputRuntime({
+    runtimeBinding: binding, onTelemetry: (e) => events.push(e),
+    recognizerFactory: () => { throw new Error('leaked-transcript-recognizer-creation-failure'); },
+  });
+  await assert.rejects(() => recognizerCreationFailure.startListening({}));
+
+  const startFailureFactory = () => ({
+    start: () => { throw new Error('leaked-transcript-start-failure'); },
+    stop: () => {}, cancel: () => {}, onResult: () => {}, onError: () => {},
+  });
+  const startFailure = createSpeechInputRuntime({ runtimeBinding: binding, recognizerFactory: startFailureFactory, onTelemetry: (e) => events.push(e) });
+  await assert.rejects(() => startFailure.startListening({}));
+
+  const recognitionFailureFactory = fakeRecognizerFactory();
+  const recognitionFailure = createSpeechInputRuntime({ runtimeBinding: binding, recognizerFactory: recognitionFailureFactory, onTelemetry: (e) => events.push(e) });
+  await recognitionFailure.startListening({});
+  recognitionFailureFactory.errorCbs[0](new Error('leaked-transcript-recognition-failure'));
+
+  assert.ok(events.length > 0);
+  for (const event of events) {
+    assert.equal(JSON.stringify(event).includes('leaked-transcript'), false);
+  }
+});
+
+test('AM-003-P0 production speech input fails closed when no supported browser primitive is available', async () => {
+  const binding = await boundRuntime();
+  assert.equal(typeof globalThis.SpeechRecognition, 'undefined');
+  assert.equal(typeof globalThis.webkitSpeechRecognition, 'undefined');
+  assert.equal(typeof globalThis.navigator, 'undefined');
+  const runtime = createProductionSpeechInputRuntime({ runtimeBinding: binding });
+  await assert.rejects(
+    () => runtime.startListening({}),
+    (e) => e instanceof SpeechInputError && e.code === 'SPEECH_PERMISSION_DENIED'
+  );
+});
+
+test('AM-003-P0 production speech input uses a real browser recognizer and reflects actual granted microphone permission', async () => {
+  const binding = await boundRuntime();
+  const fakeStream = { getTracks: () => [{ stop: () => {} }] };
+  globalThis.navigator = { mediaDevices: { getUserMedia: async () => fakeStream } };
+  class FakeSpeechRecognition {
+    start() { this.started = true; }
+    stop() {}
+    abort() {}
+  }
+  globalThis.SpeechRecognition = FakeSpeechRecognition;
+  try {
+    const runtime = createProductionSpeechInputRuntime({ runtimeBinding: binding });
+    const handle = await runtime.startListening({});
+    assert.equal(typeof handle.id, 'number');
+    assert.equal(runtime.isListening(), true);
+  } finally {
+    delete globalThis.navigator;
+    delete globalThis.SpeechRecognition;
   }
 });

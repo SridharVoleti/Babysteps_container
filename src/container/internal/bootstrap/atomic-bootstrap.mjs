@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { APPROVED_CAPABILITIES, createCapabilityFacade } from '../capabilities/index.mjs';
+import { isApprovedDegradedCapability } from '../governance/degraded-capability-policy-registry.mjs';
+import { applyClosedRuntimeLockdown } from '../safety/runtime-lockdown.mjs';
 import { resolveManifest } from '../manifest/index.mjs';
 import { loadAppPackage } from '../manifest/load-app-package.mjs';
 import { validateLaunchContext, LaunchContextError } from './launch-context.mjs';
@@ -7,14 +9,19 @@ import { createBabystepsLaunchVerifier, LaunchVerifierError } from './babysteps-
 import { bindAuthorizedRuntime, getRuntimeContext, RuntimeBindingError } from '../runtime/authorized-runtime-identity.mjs';
 
 // Lazily constructed so importing this module never requires the production verification
-// key to be configured (test/dev callers always supply their own launchOptions.verifier).
+// key(s) to be configured (test/dev callers always supply their own launchOptions.verifier).
+// SB-001: BABYSTEPS_LAUNCH_PUBLIC_KEYS carries only Babysteps' public verification key(s) -
+// a JSON object mapping kid -> public P-256 EC JWK - never a secret capable of signing.
 let defaultProductionVerifier = null;
 function resolveDefaultVerifier(env = process.env) {
   if (!defaultProductionVerifier) {
-    defaultProductionVerifier = createBabystepsLaunchVerifier({
-      verificationKey: env.BABYSTEPS_LAUNCH_VERIFICATION_KEY,
-      previousVerificationKeys: (env.BABYSTEPS_LAUNCH_VERIFICATION_KEYS_PREVIOUS ?? '').split(',').map((k) => k.trim()).filter(Boolean),
-    });
+    let publicKeys;
+    try {
+      publicKeys = JSON.parse(env.BABYSTEPS_LAUNCH_PUBLIC_KEYS ?? '');
+    } catch {
+      publicKeys = undefined;
+    }
+    defaultProductionVerifier = createBabystepsLaunchVerifier({ publicKeys });
   }
   return defaultProductionVerifier;
 }
@@ -96,7 +103,10 @@ export async function runAtomicBootstrap({
   const degradedCapabilities = [];
   for (const name of manifest.optionalCapabilities) {
     if (facade.has(name)) continue;
-    if (name in approvedFallbacks) {
+    // SB-003/DR-001-P1: a caller-supplied fallback entry is only honored when the trusted
+    // governance registry has also approved that capability for degradation - a caller
+    // cannot grant its own degraded-capability approval by naming an unregistered one.
+    if (name in approvedFallbacks && isApprovedDegradedCapability(name)) {
       degradedCapabilities.push(name);
       continue;
     }
@@ -162,6 +172,12 @@ export async function bootstrapLearningApp({
   manifestOptions = {},
   readManifestText = (path) => readFile(path, 'utf8'),
   loadModule,
+  // CC-003/SP-001/SP-003-P0: structural closed-runtime lockdown (real network/device-
+  // capability/navigation primitive denial - see safety/runtime-lockdown.mjs), applied to
+  // the real global object by default immediately before any app code is ever imported.
+  // Only test/dev callers should ever disable or retarget this.
+  enforceClosedRuntime = true,
+  lockdownTarget = globalThis,
   ...bootstrapOptions
 }) {
   if (typeof manifestPath !== 'string' || manifestPath.trim() === '') {
@@ -176,6 +192,10 @@ export async function bootstrapLearningApp({
   }
 
   const readiness = await runAtomicBootstrap({ ...bootstrapOptions, manifestInput, manifestOptions });
+
+  if (enforceClosedRuntime) {
+    applyClosedRuntimeLockdown(lockdownTarget);
+  }
 
   const effectiveManifestOptions = { ...manifestOptions, availableCapabilities: manifestOptions.availableCapabilities ?? APPROVED_CAPABILITIES };
   const loaded = await loadAppPackage(manifestPath, effectiveManifestOptions, {

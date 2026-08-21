@@ -106,6 +106,22 @@ test('SB-003-AC07 unavailable optional capability with no approved fallback fail
   assert.equal(executed, false);
 });
 
+test('SB-003-P1 a caller-supplied fallback for a capability the governance registry has not approved still blocks READY', async () => {
+  // "narration" is an approved manifest capability (CC-002) so it survives manifest
+  // resolution as a real optional capability, but it is not in the trusted
+  // degraded-capability governance registry - a caller-supplied fallback for it must not
+  // be able to grant its own degradation approval.
+  let executed = false;
+  await assert.rejects(
+    () => bootstrapReadyApp({
+      ...baseOptions({ manifestInput: manifestFixture({ optionalCapabilities: ['narration'] }), approvedFallbacks: { narration: { mode: 'silent' } } }),
+      loadApp: async () => { executed = true; },
+    }),
+    (e) => e instanceof BootstrapError && e.code === 'BOOTSTRAP_CAPABILITY_UNAVAILABLE' && e.metadata.capability === 'narration' && e.metadata.required === false
+  );
+  assert.equal(executed, false);
+});
+
 test('SB-003-AC08 mandatory container service init failure blocks launch and never enters a partial runtime', async () => {
   let executed = false;
   const coreServices = [{ name: 'sessionRegistration', init: async () => { throw new Error('database credentials leaked here'); } }];
@@ -163,16 +179,24 @@ test('SB-003-AC10 retried initialization leaves no duplicate event handlers/list
 });
 
 test('SB-001-P0 the mandatory bootstrap path uses the production Babysteps verifier by default when none is supplied', async (t) => {
-  const key = 'e'.repeat(32);
-  const priorKey = process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
-  process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = key;
+  const keyPair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const publicJwk = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  delete publicJwk.d;
+  const kid = 'key-2026-08';
+
+  const priorKeys = process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS;
+  process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS = JSON.stringify({ [kid]: publicJwk });
   t.after(() => {
-    if (priorKey === undefined) delete process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY;
-    else process.env.BABYSTEPS_LAUNCH_VERIFICATION_KEY = priorKey;
+    if (priorKeys === undefined) delete process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS;
+    else process.env.BABYSTEPS_LAUNCH_PUBLIC_KEYS = priorKeys;
   });
 
-  const sign = (claims) => createHmac('sha256', key).update(JSON.stringify(claims, Object.keys(claims).sort())).digest('hex');
-  const productionEnvelope = { claims: structuredClone(baseClaims), proof: sign(baseClaims) };
+  const sign = async (claims) => {
+    const data = new TextEncoder().encode(JSON.stringify(claims, Object.keys(claims).sort()));
+    const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, keyPair.privateKey, data);
+    return [...new Uint8Array(signature)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+  const productionEnvelope = { claims: structuredClone(baseClaims), proof: await sign(baseClaims), kid };
 
   const { verifier: _ignoredTestVerifier, ...launchOptionsWithoutVerifier } = launchOptions;
   void _ignoredTestVerifier;

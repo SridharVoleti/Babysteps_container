@@ -6,7 +6,8 @@ import { bindAuthorizedRuntime, getRuntimeContext } from '../../src/container/in
 import { createConnectedTimeTracker } from '../../src/container/internal/session/session-connected-time.mjs';
 import { createProgressAdapter, ProgressAdapterError } from '../../src/container/internal/progress/progress-adapter.mjs';
 import { createProgressRecoveryAdapter } from '../../src/container/internal/progress/pending-progress-recovery.mjs';
-import { ApiClientError } from '../../src/container/internal/api/babysteps-api-client.mjs';
+import { createBabystepsApiClient, ApiClientError } from '../../src/container/internal/api/babysteps-api-client.mjs';
+import { createAuthenticatedRequestContext, createProtectedApiClient } from '../../src/container/internal/api/authenticated-request-context.mjs';
 import { createConnectivityService, createRetryPolicy, classifyRetry, ConnectivityError } from '../../src/container/internal/runtime/connectivity-service.mjs';
 
 const baseClaims = Object.freeze({
@@ -131,6 +132,62 @@ test('ER-002-AC08 one normalized retry policy is used rather than independent co
   ]);
   assert.deepEqual([a, b, c], ['ok', 'ok', 'ok']);
   assert.equal(maxConcurrent, 1);
+});
+
+test('ER-002-P1 the API client has no independent retry loop of its own - total network attempts are bounded exactly by the one shared retry policy', async () => {
+  const binding = await boundRuntime();
+  let attempts = 0;
+  const transport = async () => { attempts += 1; return { status: 500, body: {} }; };
+  const operations = Object.freeze({
+    'progress.checkpoint': {
+      method: 'POST', path: '/v1/progress/checkpoint', authorityFields: ['learnerId', 'appId', 'releaseId', 'sessionId'], idempotent: true,
+      retry: { maxAttempts: 3, retryableStatuses: [503], timeoutMs: 30 },
+      parseResponse: (body) => (body && typeof body.acknowledged === 'boolean') ? { ok: true, data: body } : { ok: false },
+    },
+  });
+  const sharedRetryPolicy = createRetryPolicy({ maxAttempts: 3, sleep: noSleep });
+  const client = createBabystepsApiClient({
+    baseUrl: 'https://staging.api.babysteps.com', contractVersion: '2024-01', transport,
+    authProvider: async () => 'token', runtimeBinding: binding, operations,
+    retryPolicy: sharedRetryPolicy,
+  });
+
+  await assert.rejects(() => client.call('progress.checkpoint', {}), (e) => e instanceof ApiClientError && e.metadata.category === 'SERVER');
+  // Exactly the policy's own bound, not multiplied by a second competing retry loop inside
+  // the API client (which previously had its own separate maxAttempts/retry mechanism).
+  assert.equal(attempts, 3);
+});
+
+test('ER-002-P1 unrelated concurrent calls to the same operation are never coalesced into one shared attempt by the retry policy', async () => {
+  const binding = await boundRuntime();
+  const calls = [];
+  const transport = async (req) => {
+    calls.push(req);
+    if (req.headers.Authorization === 'Bearer token-1') return { status: 401, body: {} };
+    return { status: 200, body: { saved: true } };
+  };
+  const authContext = createAuthenticatedRequestContext({
+    resolveToken: async () => ({ token: 'token-1', expiresAt: Date.now() + 60000 }),
+    refreshToken: async () => { await new Promise((r) => setTimeout(r, 5)); return { token: 'token-2', expiresAt: Date.now() + 60000 }; },
+  });
+  const operations = Object.freeze({
+    'progress.save': {
+      method: 'POST', path: '/v1/progress', authorityFields: ['learnerId', 'sessionId'],
+      parseResponse: (body) => (body && typeof body.saved === 'boolean') ? { ok: true, data: { saved: body.saved } } : { ok: false },
+    },
+  });
+  const apiClient = createBabystepsApiClient({
+    baseUrl: 'https://staging.api.babysteps.com', contractVersion: '2024-01', transport,
+    authProvider: authContext.getToken, runtimeBinding: binding, operations,
+  });
+  const client = createProtectedApiClient({ apiClient, authContext, runtimeBinding: binding });
+
+  const [r1, r2] = await Promise.all([client.call('progress.save', { value: 1 }), client.call('progress.save', { value: 2 })]);
+  assert.equal(r1.saved, true);
+  assert.equal(r2.saved, true);
+  // Two genuinely independent logical calls to the same operation both reached the
+  // transport - the shared retry policy's in-flight dedup did not merge them.
+  assert.equal(calls.length, 4);
 });
 
 test('ER-002-AC09 pending retries are cancelled on teardown and cannot mutate the disposed runtime', async () => {

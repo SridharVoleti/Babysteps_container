@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { createRuntimeCapabilityService, createRuntimeCapabilityBootstrapService, RuntimeCapabilityError, BASELINE_REQUIRED_CAPABILITY } from '../../src/container/internal/runtime/capability-service.mjs';
 import { inspectSource } from '../../scripts/architecture-rules.mjs';
 import { runAtomicBootstrap, BootstrapError } from '../../src/container/internal/bootstrap/atomic-bootstrap.mjs';
+import { collectBrowserRuntimeGraphViolations } from '../../scripts/browser-runtime-graph.mjs';
 
 const available = async () => ({ status: 'AVAILABLE' });
 const unavailable = async () => ({ status: 'UNAVAILABLE' });
@@ -50,6 +51,15 @@ test('DR-001-AC04 an unavailable optional capability continues only with an expl
   });
   const result = await withFallback.ready();
   assert.deepEqual(result.degradedCapabilities, ['local-recovery-storage']);
+});
+
+test('DR-001-P1 a caller-supplied approvedDegradedCapabilities name that is not in the trusted governance registry still blocks READY', async () => {
+  const service = createRuntimeCapabilityService({
+    probes: { [BASELINE_REQUIRED_CAPABILITY]: available, 'forged-unregistered-capability': unavailable },
+    optionalCapabilities: ['forged-unregistered-capability'],
+    approvedDegradedCapabilities: ['forged-unregistered-capability'],
+  });
+  await assert.rejects(() => service.ready(), (e) => e.code === 'OPTIONAL_CAPABILITY_DEGRADED');
 });
 
 test('DR-001-AC05 app-specific code cannot implement its own browser-name based capability decision', () => {
@@ -149,4 +159,9 @@ test('DR-001 runs as a mandatory SB-003 bootstrap core service and blocks bootst
   const readyServices = [createRuntimeCapabilityBootstrapService({ probes: { [BASELINE_REQUIRED_CAPABILITY]: available } })];
   const readiness = await runAtomicBootstrap({ manifestInput, manifestOptions, launchContext, launchOptions, capabilityAdapters, coreServices: readyServices });
   assert.equal(readiness.ok, true);
+});
+
+test('DR-001-P0 the final browser runtime dependency graph resolves no node:* imports', async () => {
+  const violations = await collectBrowserRuntimeGraphViolations();
+  assert.deepEqual(violations, []);
 });

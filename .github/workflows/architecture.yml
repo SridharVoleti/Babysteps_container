@@ -375,6 +375,8 @@ jobs:
       - run: npm ci
       - name: Run DR-001 runtime capability service acceptance tests
         run: npm run test:capability-service
+      - name: Enforce DR-001 browser runtime dependency graph (no node:* imports)
+        run: npm run check:browser-runtime
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture
 

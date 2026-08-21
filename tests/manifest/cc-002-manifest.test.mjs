@@ -3,6 +3,10 @@ import assert from 'node:assert/strict';
 import { resolveManifest, validateManifest } from '../../src/container/internal/manifest/index.mjs';
 import { loadAppPackage } from '../../src/container/internal/manifest/load-app-package.mjs';
 import { bindAuthorizedRuntime } from '../../src/container/internal/runtime/authorized-runtime-identity.mjs';
+import { manifestContract } from '../../src/container/internal/manifest/contract.mjs';
+import { APPROVED_CAPABILITIES } from '../../src/container/internal/capabilities/index.mjs';
+import { CONTAINER_REQUIREMENT_TESTS } from '../../src/container/internal/conformance/requirement-registry.mjs';
+import { resolveApplicableRequirements } from '../../src/container/internal/conformance/conformance-runner.mjs';
 
 const base = {
   appId: 'magical-math',
@@ -122,4 +126,30 @@ test('CC-002-AC06 resolution is deterministic for same inputs', () => {
   const b = resolveManifest(structuredClone(base), structuredClone(options));
   assert.deepEqual(a, b);
   assert.equal(Object.isFrozen(a.manifest), true);
+});
+
+test('CC-002/AM-002/TC-003 narration is one authoritative capability shared by manifest validation, the capability facade and conformance applicability', () => {
+  assert.ok(APPROVED_CAPABILITIES.includes('narration'));
+  assert.deepEqual(manifestContract.availableCapabilities, APPROVED_CAPABILITIES);
+
+  // A required narration app validates/resolves against the real manifest contract instead
+  // of being rejected as CAPABILITY_UNAVAILABLE.
+  const requiredNarration = resolveManifest({ ...base, requiredCapabilities: ['progress', 'narration'] }, manifestContract);
+  assert.equal(requiredNarration.ok, true);
+  assert.ok(requiredNarration.manifest.requiredCapabilities.includes('narration'));
+  assert.deepEqual(requiredNarration.degradedOptionalCapabilities, []);
+  assert.ok(resolveApplicableRequirements(requiredNarration.manifest, CONTAINER_REQUIREMENT_TESTS).some((r) => r.id === 'AM-002'));
+
+  // An optional narration app keeps narration as a real (non-degraded) optional capability,
+  // since it is an approved manifest capability, not an unknown one.
+  const optionalNarration = resolveManifest({ ...base, optionalCapabilities: ['narration'] }, manifestContract);
+  assert.equal(optionalNarration.ok, true);
+  assert.deepEqual(optionalNarration.manifest.optionalCapabilities, ['narration']);
+  assert.deepEqual(optionalNarration.degradedOptionalCapabilities, []);
+  assert.ok(resolveApplicableRequirements(optionalNarration.manifest, CONTAINER_REQUIREMENT_TESTS).some((r) => r.id === 'AM-002'));
+
+  // A non-narration app never triggers AM-002 applicability against the resolved manifest.
+  const noNarration = resolveManifest(base, manifestContract);
+  assert.equal(noNarration.ok, true);
+  assert.equal(resolveApplicableRequirements(noNarration.manifest, CONTAINER_REQUIREMENT_TESTS).some((r) => r.id === 'AM-002'), false);
 });

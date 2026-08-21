@@ -27,9 +27,32 @@ const RULES = [
     test: (source) => /\bfetch\s*\(|\baxios(?:\s*\.\s*[a-zA-Z]+)?\s*\(|\bnew\s+XMLHttpRequest\s*\(|\bhttp\s*\.\s*request\s*\(|\bhttps\s*\.\s*request\s*\(|navigator\s*\.\s*sendBeacon\s*\(|\bnew\s+WebSocket\s*\(|\bnew\s+EventSource\s*\(/.test(source),
   },
   {
+    // CC-001-P1: matches the verb+noun identifier under ANY declaration style - named
+    // function, const/let/var, object-literal method/arrow property, or class method -
+    // not only `function`/`const` keyword forms, so a class method or object-literal
+    // method under an otherwise-matching name cannot bypass this by declaration style
+    // alone (renaming the identifier itself to unrelated vocabulary is a materially
+    // different, harder problem - see PLATFORM_AUTHORITY_RAW_STATE_ACCESS below, which
+    // targets the raw data such logic needs regardless of what it is named).
     code: 'PLATFORM_AUTHORITY_REIMPLEMENTATION',
     message: 'Identity, entitlement, subscription, session/credit authority and progress persistence remain platform/container owned.',
-    test: (source) => /\b(?:function|const|let|var)\s+(?:decide|determine|validate|check|calculate|compute)(?:LearnerOwnership|Entitlement|Subscription|SessionEligibility|SessionCredit|CreditEligibility)\b/i.test(source),
+    test: (source) => /\b(?:decide|determine|validate|check|calculate|compute)(?:LearnerOwnership|Entitlement|Subscription|SessionEligibility|SessionCredit|CreditEligibility)\b\s*[:(=]/i.test(source),
+  },
+  {
+    // CC-001-P1: renaming the wrapping function/method to unrelated vocabulary (the
+    // issue's own examples: canStartLearning, allowedNow) cannot evade this, because it
+    // targets the raw platform-authority-shaped DATA such logic fundamentally needs to
+    // touch - not what the surrounding function is called. App-facing contracts must
+    // expose only authoritative decisions/results (e.g. an already-computed boolean/enum),
+    // never raw entitlement/subscription/credit state for the app to re-derive a decision
+    // from with a comparison/conditional.
+    code: 'PLATFORM_AUTHORITY_RAW_STATE_ACCESS',
+    message: 'App code must not read raw entitlement/subscription/session-credit platform state and re-derive an authority decision from it; consume only the container-exposed decision/result.',
+    test: (source) => {
+      const rawStateField = /\.\s*(?:entitlement|subscriptionStatus|subscriptionPlan|subscriptionTier|creditsRemaining|sessionCredit(?:Balance)?|creditBalance|isEntitled|hasActiveSubscription)\b/i;
+      const comparisonOrBranch = /(?:===|!==|==|!=|>=|<=|>|<|&&|\|\||\bif\s*\(|\?\s*[^:]*:)/;
+      return rawStateField.test(source) && comparisonOrBranch.test(source);
+    },
   },
   {
     code: 'BROWSER_DETECTION_BYPASS',

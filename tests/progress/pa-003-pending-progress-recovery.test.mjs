@@ -194,6 +194,24 @@ test('PA-003-AC08 repeated retries after intermittent failures preserve the orig
   assert.equal(attempts.length, 3);
   const keys = new Set(attempts.map((a) => a.body.idempotencyKey));
   assert.equal(keys.size, 1);
+
+  // The platform's actual transport idempotency identity (the Idempotency-Key HTTP header)
+  // must be the same value on every attempt/retry, not a fresh UUID generated per call.
+  const headerKeys = new Set(attempts.map((a) => a.headers['Idempotency-Key']));
+  assert.equal(headerKeys.size, 1);
+  assert.equal([...headerKeys][0], [...keys][0]);
+});
+
+test('PA-003-P0 the transport Idempotency-Key header carries the same logical checkpoint identity as the body key, and a new checkpoint gets a new identity', async () => {
+  const { recovery, calls } = await buildHarness({ transport: async () => ({ status: 500, body: {} }) });
+  await recovery.checkpointWithRecovery({ level: 3 });
+  const first = checkpointCalls(calls)[0];
+  assert.equal(first.headers['Idempotency-Key'], first.body.idempotencyKey);
+
+  await recovery.checkpointWithRecovery({ level: 4 });
+  const second = checkpointCalls(calls)[1];
+  assert.notEqual(second.headers['Idempotency-Key'], first.headers['Idempotency-Key']);
+  assert.equal(second.headers['Idempotency-Key'], second.body.idempotencyKey);
 });
 
 test('PA-003-AC09 a pending client storage failure surfaces a normalized recovery error and is never represented as durably saved', async () => {

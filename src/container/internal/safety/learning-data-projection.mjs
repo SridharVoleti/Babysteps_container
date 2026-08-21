@@ -81,6 +81,46 @@ export const APPROVED_LOCAL_RECORD_KINDS = Object.freeze([
   'pending-progress-recovery',
 ]);
 
+// SP-002-P0: an approved record *kind* is not approval for an arbitrary payload. Each kind
+// has its own minimal, explicit field allowlist - an unknown top-level field is rejected by
+// default rather than silently persisted, and every field (including nested app-owned
+// payloads such as a staged progress checkpoint) is still scanned for sensitive/prohibited
+// field names before it may be written.
+const LOCAL_RECORD_FIELD_SCHEMAS = Object.freeze({
+  'session-state': Object.freeze(['lifecycleState', 'startedAt', 'pausedAt', 'resumedAt', 'endedAt', 'lastActiveAt', 'connectedMs']),
+  'progress-checkpoint': Object.freeze(['activityId', 'checkpointId', 'status', 'sequence', 'progressVersion', 'acknowledged', 'savedAt']),
+  'content-version-binding': Object.freeze(['appId', 'releaseId', 'sessionId', 'contentVersion', 'integrity']),
+  'pending-progress-recovery': Object.freeze(['scope', 'learnerId', 'appId', 'releaseId', 'sessionId', 'appProgress', 'metadata', 'idempotencyKey', 'stagedAt']),
+});
+
+function containsForbiddenField(value, path = '') {
+  if (!value || typeof value !== 'object') return null;
+  for (const [key, child] of Object.entries(value)) {
+    const current = path ? `${path}.${key}` : key;
+    if (FORBIDDEN_FIELD_PATTERN.test(key)) return current;
+    const nested = containsForbiddenField(child, current);
+    if (nested) return nested;
+  }
+  return null;
+}
+
+function validateRecordValue(kind, value) {
+  if (value === undefined || value === null) return;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    fail('LOCAL_STORAGE_POLICY_VIOLATION', `Local storage record value for "${kind}" must be a plain object.`, { kind });
+  }
+  const allowedFields = new Set(LOCAL_RECORD_FIELD_SCHEMAS[kind] ?? []);
+  for (const field of Object.keys(value)) {
+    if (!allowedFields.has(field)) {
+      fail('LOCAL_STORAGE_POLICY_VIOLATION', `Local storage record for "${kind}" declares a field outside its approved schema: ${field}`, { kind, field });
+    }
+  }
+  const forbiddenPath = containsForbiddenField(value);
+  if (forbiddenPath) {
+    fail('LOCAL_STORAGE_POLICY_VIOLATION', `Local storage record for "${kind}" contains a prohibited sensitive field: ${forbiddenPath}`, { kind, field: forbiddenPath });
+  }
+}
+
 export function createApprovedLocalStore({ backingStore, onTelemetry = () => {} }) {
   if (!backingStore || typeof backingStore.setItem !== 'function' || typeof backingStore.getItem !== 'function') {
     fail('LOCAL_STORAGE_POLICY_VIOLATION', 'A backing storage adapter with setItem/getItem is required.');
@@ -98,6 +138,12 @@ export function createApprovedLocalStore({ backingStore, onTelemetry = () => {} 
     if (!APPROVED_LOCAL_RECORD_KINDS.includes(kind)) {
       emit('local_storage_policy_violation', { kind });
       fail('LOCAL_STORAGE_POLICY_VIOLATION', `Local storage record kind is not approved: ${kind}`, { kind });
+    }
+    try {
+      validateRecordValue(kind, value);
+    } catch (error) {
+      emit('local_storage_policy_violation', { kind });
+      throw error;
     }
     backingStore.setItem(namespacedKey(kind, sessionId, key), value);
     return { written: true };

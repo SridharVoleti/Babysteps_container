@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
 import { ProgressAdapterError } from './progress-adapter.mjs';
 
@@ -97,7 +96,9 @@ export function createProgressRecoveryAdapter({ runtimeBinding, progressAdapter,
   }
 
   async function checkpointWithRecovery(appProgress, metadata = {}) {
-    const idempotencyKey = randomUUID();
+    // Browser-native WebCrypto (globalThis.crypto.randomUUID), also available in Node - no
+    // node:crypto import required (DR-001).
+    const idempotencyKey = crypto.randomUUID();
     try {
       const result = await progressAdapter.checkpoint(appProgress, { ...metadata, idempotencyKey });
       clear(result.acknowledged ? 'ACKNOWLEDGED' : (result.conflict ? 'CONFLICT' : 'REJECTED'));

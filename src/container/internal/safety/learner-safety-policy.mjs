@@ -1,4 +1,6 @@
 import { getRuntimeContext } from '../runtime/authorized-runtime-identity.mjs';
+import { sanitizeCause } from '../telemetry/sanitize-cause.mjs';
+import { APPROVED_NAVIGATION_DESTINATION_CLASSES, APPROVED_NOTIFICATION_PURPOSES } from '../governance/navigation-policy-registry.mjs';
 
 export class LearnerSafetyError extends Error {
   constructor(code, message, metadata = {}) {
@@ -31,22 +33,22 @@ const PROHIBITED_BEHAVIORS = Object.freeze([
   'files',
 ]);
 
-const DEFAULT_APPROVED_NOTIFICATION_PURPOSES = Object.freeze(['session-reminder-30-min']);
-
 // SP-001: sits at the learner-runtime boundary. App-specific code consumes microphone/STT
 // only through AM-003 and notifications only through this policy's guarded registration path;
 // every other device capability and every closed-runtime behavior (ads, public identity,
 // learner-to-learner comms, open-ended AI, arbitrary external navigation) is deny-by-default.
+// SP-001-P0: approved navigation destinations and notification purposes are read only from
+// the trusted, version-controlled governance/navigation-policy-registry.mjs - there is no
+// constructor parameter for either any more, so a caller can never self-approve a new
+// destination/purpose by passing its own array.
 export function createLearnerSafetyPolicy({
   runtimeBinding,
   notificationAdapter,
-  approvedNotificationPurposes = DEFAULT_APPROVED_NOTIFICATION_PURPOSES,
-  approvedNavigationDestinations = [],
   onTelemetry = () => {},
 }) {
   const identity = getRuntimeContext(runtimeBinding);
-  const purposeAllowlist = new Set(approvedNotificationPurposes);
-  const navigationAllowlist = new Set(approvedNavigationDestinations);
+  const purposeAllowlist = new Set(APPROVED_NOTIFICATION_PURPOSES);
+  const navigationAllowlist = new Set(APPROVED_NAVIGATION_DESTINATION_CLASSES);
 
   function emit(event, extra = {}) {
     onTelemetry(Object.freeze({
@@ -90,7 +92,7 @@ export function createLearnerSafetyPolicy({
     try {
       result = await notificationAdapter.register(purposeId, payload);
     } catch (error) {
-      emit('notification_permission_denied', { purposeId, cause: error?.message });
+      emit('notification_permission_denied', { purposeId, cause: sanitizeCause(error) });
       return Object.freeze({ registered: false, reason: 'NOTIFICATION_PERMISSION_DENIED' });
     }
     if (!result?.granted) {
