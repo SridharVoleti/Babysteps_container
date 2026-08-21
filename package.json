@@ -55,9 +55,29 @@
     "test:conformance-gate": "node --test tests/conformance/tc-003-conformance-gate.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps",
-    "conformance": "node scripts/run-container-conformance.mjs"
+    "conformance": "node scripts/run-container-conformance.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.108.0",
+    "next": "^14.2.0",
+    "react": "^18",
+    "react-chessboard": "^4.7.2",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5"
   }
 }

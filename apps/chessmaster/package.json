@@ -1,0 +1,10 @@
+{
+  "name": "@babysteps/app-chessmaster",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@babysteps/consumer-app-container": "file:../..",
+    "chess.js": "1.4.0"
+  }
+}
