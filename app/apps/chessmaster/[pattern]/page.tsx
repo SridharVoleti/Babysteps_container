@@ -15,6 +15,13 @@ interface Props {
   params: { pattern: string }
 }
 
+// Every render depends on the requester's session cookie (auth + active booked-day usage),
+// so this route must never be statically generated or ISR-cached — a cached render for one
+// student's cookies must not be served to another request. generateStaticParams (build-time
+// prerendering) is incompatible with that and was causing Vercel to cache a stale notFound()
+// render for /fork behind the deployment's edge cache.
+export const dynamic = 'force-dynamic'
+
 export default async function PlayPage({ params }: Props) {
   // SB-001: playing requires a logged-in student with an active booked-day usage session —
   // this is the container's launch authority, not an optional gate (see lib/platform/authz).
@@ -26,8 +33,4 @@ export default async function PlayPage({ params }: Props) {
   if (!puzzle) notFound()
 
   return <ChessmasterGame puzzle={puzzle} />
-}
-
-export function generateStaticParams() {
-  return Object.keys(PUZZLES).map(pattern => ({ pattern }))
 }
