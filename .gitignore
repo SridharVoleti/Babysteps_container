@@ -1,0 +1,13 @@
+node_modules/
+conformance-report.json
+conformance-report.md
+
+# Next.js
+.next/
+next-env.d.ts
+.vercel
+
+# env
+.env
+.env.local
+.env*.local

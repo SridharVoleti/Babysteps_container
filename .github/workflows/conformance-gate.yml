@@ -1,0 +1,37 @@
+name: Container conformance gate
+
+# TC-003: runs the complete applicable frozen Consumer App Container acceptance suite against
+# an assembled final app and blocks production deployment on any mandatory failure. GitHub CI
+# is the gate; Vercel remains the deployment platform; BR-003 remains authoritative for
+# deployment safety/rollback - this workflow only decides release-gate PASS/FAIL and produces
+# the JSON/human-readable conformance report bound to PK-003 release composition.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run TC-003 container conformance gate for apps/example
+        run: npm run conformance -- apps/example .
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+      - name: Upload conformance report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: conformance-report
+          path: |
+            conformance-report.json
+            conformance-report.md

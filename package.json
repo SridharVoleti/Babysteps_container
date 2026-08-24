@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "apps/*"
+  ],
+  "exports": {
+    ".": "./src/container/public/index.mjs",
+    "./capabilities": "./src/container/public/capabilities.mjs",
+    "./package.json": "./package.json"
+  },
   "scripts": {
     "test": "node --test",
     "test:architecture": "node --test tests/architecture/*.test.mjs",
@@ -10,10 +18,67 @@
     "test:capabilities": "node --test tests/capabilities/*.test.mjs",
     "test:extensions": "node --test tests/extensions/*.test.mjs",
     "test:launch-context": "node --test tests/bootstrap/sb-001-authorized-launch-context.test.mjs",
+    "test:launch-verifier": "node --test tests/bootstrap/sb-001-babysteps-launch-verifier.test.mjs",
+    "test:bootstrap-learning-app": "node --test tests/bootstrap/sb-003-bootstrap-learning-app.test.mjs",
+    "test:runtime-binding": "node --test tests/runtime/sb-002-runtime-context-binding.test.mjs",
+    "test:atomic-bootstrap": "node --test tests/bootstrap/sb-003-atomic-bootstrap.test.mjs",
+    "test:api-client": "node --test tests/api/api-001-babysteps-api-client.test.mjs",
+    "test:auth-context": "node --test tests/api/api-002-authenticated-request-context.test.mjs",
+    "test:contract-validation": "node --test tests/api/api-003-contract-validation.test.mjs",
+    "test:session-runtime": "node --test tests/session/sr-001-session-runtime.test.mjs",
+    "test:session-lifecycle": "node --test tests/session/sr-002-session-lifecycle.test.mjs",
+    "test:session-clock": "node --test tests/session/sr-003-session-clock.test.mjs",
+    "test:session-completion": "node --test tests/session/sr-004-session-completion.test.mjs",
+    "test:session-interruption": "node --test tests/session/sr-005-session-interruption.test.mjs",
+    "test:connected-time": "node --test tests/session/sr-006-connected-time.test.mjs",
+    "test:activity-host": "node --test tests/activities/ah-001-activity-host.test.mjs",
+    "test:activity-lifecycle": "node --test tests/activities/ah-002-activity-lifecycle.test.mjs",
+    "test:content-runtime": "node --test tests/content/cr-001-content-runtime.test.mjs",
+    "test:session-content-binding": "node --test tests/content/cr-002-session-content-binding.test.mjs",
+    "test:progress-adapter": "node --test tests/progress/pa-001-progress-adapter.test.mjs",
+    "test:progress-restore": "node --test tests/progress/pa-002-progress-restore.test.mjs",
+    "test:pending-progress-recovery": "node --test tests/progress/pa-003-pending-progress-recovery.test.mjs",
+    "test:learning-session-shell": "node --test tests/shell/ux-001-learning-session-shell.test.mjs",
+    "test:package-boundary": "node --test tests/architecture/cc-003-package-boundary.test.mjs",
+    "test:audio-runtime": "node --test tests/media/am-001-audio-runtime.test.mjs",
+    "test:narration-voice": "node --test tests/media/am-002-narration-voice-provider.test.mjs",
+    "test:speech-input": "node --test tests/media/am-003-speech-input-runtime.test.mjs",
+    "test:capability-service": "node --test tests/runtime/dr-001-capability-service.test.mjs",
+    "test:responsive-runtime": "node --test tests/runtime/dr-002-responsive-runtime.test.mjs",
+    "test:local-ownership": "node --test tests/runtime/dr-003-local-ownership-coordinator.test.mjs",
+    "test:error-boundary": "node --test tests/runtime/er-001-error-boundary.test.mjs",
+    "test:connectivity-retry": "node --test tests/runtime/er-002-connectivity-retry.test.mjs",
+    "test:learner-safety-policy": "node --test tests/safety/sp-001-learner-safety-policy.test.mjs",
+    "test:data-projection": "node --test tests/safety/sp-002-learning-data-projection.test.mjs",
+    "test:egress-policy": "node --test tests/safety/sp-003-egress-policy.test.mjs",
+    "test:release-composition": "node --test tests/release/pk-003-release-composition.test.mjs",
+    "test:conformance-gate": "node --test tests/conformance/tc-003-conformance-gate.test.mjs",
     "check:architecture": "node scripts/check-architecture.mjs apps",
-    "check:manifests": "node scripts/validate-manifests.mjs apps"
+    "check:manifests": "node scripts/validate-manifests.mjs apps",
+    "check:browser-runtime": "node scripts/check-browser-runtime.mjs",
+    "conformance": "node scripts/run-container-conformance.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
   },
   "engines": {
     "node": ">=20"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.108.0",
+    "next": "^14.2.0",
+    "react": "^18",
+    "react-chessboard": "^4.7.2",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5"
   }
 }

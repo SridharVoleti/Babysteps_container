@@ -7,11 +7,23 @@ const REQUIRED_STRING_FIELDS = [
   'entryPoint'
 ];
 
+const OPTIONAL_TOP_LEVEL_FIELDS = ['contentConfiguration', 'requiredCapabilities', 'optionalCapabilities', 'extensionPoints'];
+
+// Approved/frozen manifest fields only (CC-002). Unknown top-level fields are rejected
+// outright rather than merely denylisted, so alternate/unexpected names cannot smuggle
+// platform-authoritative or secret data through the manifest.
+const ALLOWED_TOP_LEVEL_FIELDS = new Set([...REQUIRED_STRING_FIELDS, ...OPTIONAL_TOP_LEVEL_FIELDS]);
+
 const PROHIBITED_KEYS = new Set([
   'secret', 'secrets', 'password', 'token', 'authToken', 'accessToken', 'refreshToken',
   'serviceRoleKey', 'databaseUrl', 'dbUrl', 'paymentData', 'billing', 'subscription',
   'learnerId', 'sessionId', 'entitlement', 'sessionCredit', 'parentProfile', 'learnerProfile'
 ]);
+
+// Nested app-owned data (contentConfiguration) stays opaque/app-defined, but is still
+// scanned for these alternate spellings of the same prohibited data categories so it
+// cannot become a side channel for secrets or platform-authoritative identifiers.
+const PROHIBITED_KEY_PATTERN = /secret|credential|private.*profile|api[_-]?key|access[_-]?token|refresh[_-]?token|parent[_-]?id|user[_-]?id/i;
 
 const DEFAULTS = Object.freeze({
   contentConfiguration: Object.freeze({}),
@@ -31,7 +43,7 @@ function containsProhibitedData(value, path = '') {
   if (!value || typeof value !== 'object') return null;
   for (const [key, child] of Object.entries(value)) {
     const current = path ? `${path}.${key}` : key;
-    if (PROHIBITED_KEYS.has(key) || /secret|credential|private.*profile/i.test(key)) return current;
+    if (PROHIBITED_KEYS.has(key) || PROHIBITED_KEY_PATTERN.test(key)) return current;
     const nested = containsProhibitedData(child, current);
     if (nested) return nested;
   }
@@ -52,13 +64,23 @@ export function validateManifest(manifest, options = {}) {
     return failure('MANIFEST_PROHIBITED_DATA', 'App manifest contains prohibited runtime or secret data.', { field: prohibitedPath });
   }
 
+  for (const key of Object.keys(manifest)) {
+    if (!ALLOWED_TOP_LEVEL_FIELDS.has(key)) {
+      return failure('MANIFEST_UNKNOWN_FIELD', 'App manifest contains an unapproved top-level field.', { field: key });
+    }
+  }
+
   for (const field of REQUIRED_STRING_FIELDS) {
     if (typeof manifest[field] !== 'string' || manifest[field].trim() === '') {
       return failure('MANIFEST_INVALID', `App manifest field ${field} is required and must be a non-empty string.`);
     }
   }
 
-  for (const field of ['requiredCapabilities', 'optionalCapabilities', 'extensionPoints']) {
+  if (!isStringArray(manifest.requiredCapabilities)) {
+    return failure('MANIFEST_INVALID', 'App manifest field requiredCapabilities is required and must be an array of non-empty strings (an empty array is permitted).');
+  }
+
+  for (const field of ['optionalCapabilities', 'extensionPoints']) {
     if (manifest[field] !== undefined && !isStringArray(manifest[field])) {
       return failure('MANIFEST_INVALID', `App manifest field ${field} must be an array of non-empty strings.`);
     }

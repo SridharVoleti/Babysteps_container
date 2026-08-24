@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { validateLaunchContext, bootstrapAuthorizedLaunch, LaunchContextError } from '../../src/container/internal/bootstrap/launch-context.mjs';
+import { validateLaunchContext, bootstrapAuthorizedLaunch, LaunchContextError, MAX_FUTURE_ISSUANCE_SKEW_MS } from '../../src/container/internal/bootstrap/launch-context.mjs';
 
 const manifest = Object.freeze({ appId: 'magical-math' });
 const baseClaims = Object.freeze({
@@ -43,6 +43,28 @@ test('SB-001-AC06 substituted release is rejected', async () => {
   await assert.rejects(() => validateLaunchContext({ launchContext: envelope(), ...opts, expectedReleaseId: 'release-2' }), e => e.code === 'LAUNCH_CONTEXT_MISMATCH');
 });
 
+test('SB-001-AC12 substituted session is rejected', async () => {
+  await assert.rejects(() => validateLaunchContext({ launchContext: envelope(), ...opts, expectedSessionId: 'session-2' }), e => e.code === 'LAUNCH_CONTEXT_MISMATCH');
+});
+
+test('SB-001-AC12 an omitted expected release binding fails closed rather than skipping the check', async () => {
+  const { expectedReleaseId, ...withoutRelease } = opts;
+  void expectedReleaseId;
+  await assert.rejects(
+    () => validateLaunchContext({ launchContext: envelope(), ...withoutRelease }),
+    (e) => e instanceof LaunchContextError && e.code === 'LAUNCH_CONTEXT_BINDING_REQUIRED'
+  );
+});
+
+test('SB-001-AC12 an omitted expected session binding fails closed rather than skipping the check', async () => {
+  const { expectedSessionId, ...withoutSession } = opts;
+  void expectedSessionId;
+  await assert.rejects(
+    () => validateLaunchContext({ launchContext: envelope(), ...withoutSession }),
+    (e) => e instanceof LaunchContextError && e.code === 'LAUNCH_CONTEXT_BINDING_REQUIRED'
+  );
+});
+
 test('SB-001-AC07 modified learner/session identifiers do not become authorized', async () => {
   const bad = envelope(); bad.claims.sessionId = 'session-evil';
   await assert.rejects(() => validateLaunchContext({ launchContext: bad, ...opts }), e => e.code === 'LAUNCH_CONTEXT_INVALID');
@@ -57,6 +79,30 @@ test('SB-001-AC08 app execution waits for validation completion', async () => {
 test('SB-001-AC09 validator consumes upstream authorization and implements no business decisions', async () => {
   const runtime = await validateLaunchContext({ launchContext: envelope(), ...opts });
   assert.deepEqual(Object.keys(runtime).sort(), ['appId','correlationId','issuedAt','launchMode','learnerId','releaseId','sessionId'].sort());
+});
+
+test('SB-001-AC11 a launch context issued beyond the permitted clock-skew tolerance is rejected', async () => {
+  const currentTime = new Date('2026-08-18T00:10:00.000Z');
+  const tooFarFuture = {
+    ...baseClaims,
+    issuedAt: new Date(currentTime.getTime() + MAX_FUTURE_ISSUANCE_SKEW_MS + 5_000).toISOString(),
+    expiresAt: new Date(currentTime.getTime() + MAX_FUTURE_ISSUANCE_SKEW_MS + 3_600_000).toISOString(),
+  };
+  await assert.rejects(
+    () => validateLaunchContext({ launchContext: envelope(tooFarFuture), ...opts, now: () => currentTime }),
+    (e) => e instanceof LaunchContextError && e.code === 'LAUNCH_CONTEXT_NOT_YET_VALID'
+  );
+});
+
+test('SB-001-AC11 a launch context issued within the permitted clock-skew tolerance still validates normally', async () => {
+  const currentTime = new Date('2026-08-18T00:10:00.000Z');
+  const withinSkew = {
+    ...baseClaims,
+    issuedAt: new Date(currentTime.getTime() + MAX_FUTURE_ISSUANCE_SKEW_MS - 1_000).toISOString(),
+    expiresAt: new Date(currentTime.getTime() + 3_600_000).toISOString(),
+  };
+  const runtime = await validateLaunchContext({ launchContext: envelope(withinSkew), ...opts, now: () => currentTime });
+  assert.equal(runtime.learnerId, 'learner-1');
 });
 
 test('SB-001-AC10 runtime payload is minimal and excludes parent/billing/subscription data', async () => {

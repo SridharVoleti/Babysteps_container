@@ -1,6 +1,11 @@
 const REQUIRED_CLAIMS = ['learnerId','appId','releaseId','sessionId','launchMode','issuedAt','expiresAt','correlationId'];
 const ALLOWED_MODES = new Set(['start','resume']);
 
+// Centralized, documented clock-skew tolerance for launch-context issuance (SB-001).
+// A launch context issued more than this far in the future (relative to the container's
+// own clock) is rejected; callers cannot opt out of or widen this tolerance.
+export const MAX_FUTURE_ISSUANCE_SKEW_MS = 60_000;
+
 export class LaunchContextError extends Error {
   constructor(code, message) { super(message); this.name = 'LaunchContextError'; this.code = code; Object.freeze(this); }
 }
@@ -22,11 +27,14 @@ export async function validateLaunchContext({ launchContext, manifest, expectedR
 
   const issuedAt = Date.parse(claims.issuedAt); const expiresAt = Date.parse(claims.expiresAt); const current = now().getTime();
   if (!Number.isFinite(issuedAt) || !Number.isFinite(expiresAt) || expiresAt <= issuedAt) fail('LAUNCH_CONTEXT_INVALID', 'Authorized launch timestamps are invalid.');
+  if (issuedAt > current + MAX_FUTURE_ISSUANCE_SKEW_MS) fail('LAUNCH_CONTEXT_NOT_YET_VALID', 'Authorized launch context is issued too far in the future.');
   if (current >= expiresAt) fail('LAUNCH_CONTEXT_EXPIRED', 'Authorized launch context has expired.');
 
   if (!manifest || claims.appId !== manifest.appId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized app does not match resolved application.');
-  if (expectedReleaseId && claims.releaseId !== expectedReleaseId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized release does not match resolved release.');
-  if (expectedSessionId && claims.sessionId !== expectedSessionId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized session does not match expected session.');
+  if (!nonEmptyString(expectedReleaseId)) fail('LAUNCH_CONTEXT_BINDING_REQUIRED', 'An expected release binding is required to validate an authorized launch context.');
+  if (!nonEmptyString(expectedSessionId)) fail('LAUNCH_CONTEXT_BINDING_REQUIRED', 'An expected session binding is required to validate an authorized launch context.');
+  if (claims.releaseId !== expectedReleaseId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized release does not match resolved release.');
+  if (claims.sessionId !== expectedSessionId) fail('LAUNCH_CONTEXT_MISMATCH', 'Authorized session does not match expected session.');
 
   return Object.freeze({
     learnerId: claims.learnerId,
@@ -39,6 +47,12 @@ export async function validateLaunchContext({ launchContext, manifest, expectedR
   });
 }
 
+// This is the low-level SB-001 primitive (validate the launch context, then invoke a
+// caller-supplied loader) used to test/compose launch-context validation in isolation. It
+// intentionally does NOT run manifest resolution or capability/service setup, so it is not
+// a production app-launch entrypoint. The single mandatory production path is SB-003's
+// bootstrapLearningApp() (src/container/internal/bootstrap/atomic-bootstrap.mjs), which
+// composes this validation with those mandatory gates before any app code can be imported.
 export async function bootstrapAuthorizedLaunch({ loadApp, ...validation }) {
   const runtimeContext = await validateLaunchContext(validation);
   if (typeof loadApp !== 'function') fail('LAUNCH_CONTEXT_INVALID', 'Application loader is unavailable.');

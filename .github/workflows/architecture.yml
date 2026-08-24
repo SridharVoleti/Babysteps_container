@@ -15,6 +15,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-001 architecture tests
         run: npm run test:architecture
       - name: Enforce CC-001 app boundaries
@@ -27,6 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-002 manifest acceptance tests
         run: npm run test:manifest
       - name: Validate all app manifests
@@ -39,8 +41,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-003 capability acceptance tests
         run: npm run test:capabilities
+      - name: Run CC-003 package boundary tests
+        run: npm run test:package-boundary
       - name: Enforce app capability/platform boundaries
         run: npm run check:architecture
 
@@ -51,6 +56,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run CC-004 extension acceptance tests
         run: npm run test:extensions
       - name: Enforce extension boundaries
@@ -63,7 +69,430 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - run: npm ci
       - name: Run SB-001 launch-context acceptance tests
         run: npm run test:launch-context
+      - name: Run SB-001 production launch-verifier tests
+        run: npm run test:launch-verifier
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sb-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SB-002 runtime context binding acceptance tests
+        run: npm run test:runtime-binding
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sb-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SB-003 atomic bootstrap acceptance tests
+        run: npm run test:atomic-bootstrap
+      - name: Run SB-003 mandatory bootstrapLearningApp entrypoint tests
+        run: npm run test:bootstrap-learning-app
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  api-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run API-001 Babysteps API client acceptance tests
+        run: npm run test:api-client
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  api-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run API-002 authenticated request context acceptance tests
+        run: npm run test:auth-context
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  api-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run API-003 contract validation acceptance tests
+        run: npm run test:contract-validation
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-001 session runtime acceptance tests
+        run: npm run test:session-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-002 session lifecycle acceptance tests
+        run: npm run test:session-lifecycle
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-003 session clock acceptance tests
+        run: npm run test:session-clock
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-004:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-004 session completion acceptance tests
+        run: npm run test:session-completion
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-005:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-005 session interruption/resume acceptance tests
+        run: npm run test:session-interruption
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sr-006:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SR-006 connected learning time acceptance tests
+        run: npm run test:connected-time
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  ah-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run AH-001 activity host contract acceptance tests
+        run: npm run test:activity-host
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  ah-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run AH-002 activity lifecycle/resource isolation acceptance tests
+        run: npm run test:activity-lifecycle
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  cr-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run CR-001 app-owned content binding acceptance tests
+        run: npm run test:content-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  cr-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run CR-002 session content version pinning acceptance tests
+        run: npm run test:session-content-binding
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  pa-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run PA-001 standard progress checkpoint handoff acceptance tests
+        run: npm run test:progress-adapter
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  pa-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run PA-002 authoritative progress restore acceptance tests
+        run: npm run test:progress-restore
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  pa-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run PA-003 pending progress recovery acceptance tests
+        run: npm run test:pending-progress-recovery
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  ux-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run UX-001 learning session shell acceptance tests
+        run: npm run test:learning-session-shell
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  am-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run AM-001 shared audio playback lifecycle acceptance tests
+        run: npm run test:audio-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  am-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run AM-002 packaged standard narration voice acceptance tests
+        run: npm run test:narration-voice
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  am-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run AM-003 shared speech input & transcription acceptance tests
+        run: npm run test:speech-input
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  dr-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run DR-001 runtime capability service acceptance tests
+        run: npm run test:capability-service
+      - name: Enforce DR-001 browser runtime dependency graph (no node:* imports)
+        run: npm run check:browser-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  dr-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run DR-002 mobile/desktop functional parity acceptance tests
+        run: npm run test:responsive-runtime
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  dr-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run DR-003 local runtime ownership acceptance tests
+        run: npm run test:local-ownership
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  er-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run ER-001 runtime error boundary acceptance tests
+        run: npm run test:error-boundary
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  er-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run ER-002 connectivity/retry policy acceptance tests
+        run: npm run test:connectivity-retry
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sp-001:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SP-001 learner safety policy acceptance tests
+        run: npm run test:learner-safety-policy
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sp-002:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SP-002 learning data projection acceptance tests
+        run: npm run test:data-projection
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  sp-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run SP-003 approved egress policy acceptance tests
+        run: npm run test:egress-policy
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  pk-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run PK-003 release composition traceability acceptance tests
+        run: npm run test:release-composition
+      - name: Re-enforce architecture boundaries
+        run: npm run check:architecture
+
+  tc-003:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - name: Run TC-003 conformance gate acceptance tests
+        run: npm run test:conformance-gate
       - name: Re-enforce architecture boundaries
         run: npm run check:architecture

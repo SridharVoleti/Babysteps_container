@@ -1,0 +1,11 @@
+{
+  "appId": "chessmaster",
+  "appVersion": "0.1.0",
+  "containerContractVersion": "1.0",
+  "contentVersion": "0.1.0",
+  "progressSchemaVersion": "1",
+  "requiredCapabilities": ["progress"],
+  "optionalCapabilities": [],
+  "extensionPoints": ["activity-renderer"],
+  "entryPoint": "./index.mjs"
+}
