@@ -18,6 +18,12 @@ export function getSupabaseAdmin(): SupabaseClient {
 
   cached = createClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
+    // Next.js 14's fetch() patch caches GET requests (force-cache) by default, keyed by URL —
+    // including third-party libraries' calls, since they resolve the same patched global
+    // fetch. Every read here is authoritative platform state (bookings, sessions, progress),
+    // so every request must bypass that cache; route-level `dynamic = 'force-dynamic'` alone
+    // does not guarantee that for fetches made outside the route handler's own code.
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   })
   return cached
 }

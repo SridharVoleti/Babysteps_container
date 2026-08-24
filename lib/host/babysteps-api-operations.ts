@@ -78,7 +78,7 @@ export const BABYSTEPS_API_OPERATIONS = Object.freeze({
   'session.finalize': {
     method: 'POST',
     path: '/api/v1/session-finalize',
-    authorityFields: ['learnerId', 'sessionId'],
+    authorityFields: ['learnerId', 'releaseId', 'sessionId'],
     idempotent: true,
     parseResponse: sessionFinalizeContract.parseResponse,
   },

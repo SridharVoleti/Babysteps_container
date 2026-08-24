@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
         { status: 404 },
       )
     }
-    return NextResponse.json({ session, launch: launchFor(student.id, session, 'resume') })
+    return NextResponse.json({ session, launch: await launchFor(student.id, session, 'resume') })
   } catch (e) {
     return errorResponse(e)
   }
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
     const student = await studentFromCookies(req.cookies)
     if (!student) return unauthenticatedResponse()
     const { session, resumed } = await getAuthzService().startSession(student.id)
-    const launch = launchFor(student.id, session, resumed ? 'resume' : 'start')
+    const launch = await launchFor(student.id, session, resumed ? 'resume' : 'start')
     return NextResponse.json({ session, resumed, launch }, { status: resumed ? 200 : 201 })
   } catch (e) {
     return errorResponse(e)

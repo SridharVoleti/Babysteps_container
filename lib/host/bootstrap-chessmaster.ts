@@ -18,6 +18,7 @@ import * as ChessmasterAppModule from '../../apps/chessmaster/index.mjs'
 // sites. Importing as `* as X` and casting the whole namespace to `any` up front avoids that
 // inference entirely, rather than fighting it call-by-call.
 import * as AtomicBootstrapModule from '../../src/container/internal/bootstrap/atomic-bootstrap.mjs'
+import * as ManifestContractModule from '../../src/container/internal/manifest/contract.mjs'
 import * as RuntimeIdentityModule from '../../src/container/internal/runtime/authorized-runtime-identity.mjs'
 import * as SessionLifecycleModule from '../../src/container/internal/session/session-lifecycle.mjs'
 import * as SessionCompletionModule from '../../src/container/internal/session/session-completion.mjs'
@@ -29,6 +30,7 @@ import { BABYSTEPS_API_OPERATIONS } from './babysteps-api-operations'
 
 const chessmasterApp: any = (ChessmasterAppModule as any).default
 const bootstrapLearningApp: any = (AtomicBootstrapModule as any).bootstrapLearningApp
+const manifestContract: any = (ManifestContractModule as any).manifestContract
 const getRuntimeContext: any = (RuntimeIdentityModule as any).getRuntimeContext
 const createSessionLifecycle: any = (SessionLifecycleModule as any).createSessionLifecycle
 const createSessionCompletion: any = (SessionCompletionModule as any).createSessionCompletion
@@ -53,6 +55,7 @@ export interface LaunchEnvelope {
     correlationId: string
   }
   proof: string
+  kid: string
 }
 
 export interface RunAttemptParams {
@@ -64,9 +67,14 @@ export interface RunAttemptParams {
   resumeAttemptNumber: number
 }
 
-function transportFor(cookieHeader: string) {
+// bootstrapLearningApp() applies the SP-001/CC-003 closed-runtime lockdown (real
+// globalThis.fetch denial) before any app code runs, so it must be captured here first: this
+// is the container's own approved transport, not app code, but in a Node/SSR host process
+// there is no separate browser-tab boundary between the two, so a fetch reference taken
+// AFTER bootstrap would be denied like any other unapproved caller.
+function transportFor(cookieHeader: string, fetchImpl: typeof fetch) {
   return async function transport(requestEnvelope: { method: string; url: string; headers: Record<string, string>; body: unknown }) {
-    const res = await fetch(requestEnvelope.url, {
+    const res = await fetchImpl(requestEnvelope.url, {
       method: requestEnvelope.method,
       headers: {
         ...requestEnvelope.headers,
@@ -89,8 +97,11 @@ function transportFor(cookieHeader: string) {
 export async function runChessmasterAttempt(params: RunAttemptParams): Promise<any> {
   const { baseUrl, cookieHeader, launch, puzzle, playerMoveUci, resumeAttemptNumber } = params
 
+  const realFetch = globalThis.fetch.bind(globalThis)
+
   const { readiness, appDefinition } = await bootstrapLearningApp({
     manifestPath: VIRTUAL_MANIFEST_PATH,
+    manifestOptions: manifestContract,
     readManifestText: async () => JSON.stringify(manifestJson),
     loadModule: async () => ({ default: chessmasterApp }),
     launchContext: launch,
@@ -103,7 +114,7 @@ export async function runChessmasterAttempt(params: RunAttemptParams): Promise<a
   })
 
   const identity = getRuntimeContext(readiness.runtime)
-  const transport = transportFor(cookieHeader)
+  const transport = transportFor(cookieHeader, realFetch)
   const apiClient = createBabystepsApiClient({
     baseUrl,
     contractVersion: '1.0',
@@ -119,7 +130,18 @@ export async function runChessmasterAttempt(params: RunAttemptParams): Promise<a
   const protectedClient = createProtectedApiClient({ apiClient, authContext, runtimeBinding: readiness.runtime })
 
   const progressAdapter = createProgressAdapter({ sessionIdentity: identity, progressClient: protectedClient })
-  const finalizationAdapter = createFinalizationAdapter({ progressClient: protectedClient, finalizationClient: protectedClient })
+  // createFinalizationAdapter (container-internal, shared across apps) calls
+  // progressClient.call('progress.save', finalProgress) with a flat app-progress payload — the
+  // same convention progressAdapter.checkpoint() itself wraps as { appProgress: ... } before
+  // it reaches the transport. 'progress.save' intentionally reuses PA-001's checkpoint
+  // endpoint/contract (see babysteps-api-operations.ts), which requires that same appProgress
+  // wrapping, so this host-only adapter applies it — the container-internal calling
+  // convention stays untouched for every other caller.
+  const finalizationProgressClient = {
+    call: (operationName: string, payload: unknown) =>
+      protectedClient.call(operationName, operationName === 'progress.save' ? { appProgress: payload } : payload),
+  }
+  const finalizationAdapter = createFinalizationAdapter({ progressClient: finalizationProgressClient, finalizationClient: protectedClient })
   const lifecycle = createSessionLifecycle({ sessionIdentity: identity, sessionAdapter: finalizationAdapter })
   const completion = createSessionCompletion({ sessionIdentity: identity, lifecycle })
 
