@@ -53,6 +53,7 @@
     "test:egress-policy": "node --test tests/safety/sp-003-egress-policy.test.mjs",
     "test:release-composition": "node --test tests/release/pk-003-release-composition.test.mjs",
     "test:conformance-gate": "node --test tests/conformance/tc-003-conformance-gate.test.mjs",
+    "test:launch": "node --test tests/launch/",
     "check:architecture": "node scripts/check-architecture.mjs apps",
     "check:manifests": "node scripts/validate-manifests.mjs apps",
     "check:browser-runtime": "node scripts/check-browser-runtime.mjs",
@@ -67,6 +68,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.108.0",
+    "jose": "^5.10.0",
     "next": "^14.2.0",
     "react": "^18",
     "react-chessboard": "^4.7.2",

@@ -152,19 +152,30 @@ export class AuthzService {
       throw new AuthzError('INVALID_CREDENTIALS', 'Email or password is incorrect.')
     }
 
+    const auth = await this.issueToken(row.id)
+    return { student: toStudent(row), auth }
+  }
+
+  /**
+   * Mint a bearer token for a student and persist only its hash. Shared by login() and the
+   * BabySteps app-launch handoff (lib/platform/app-launch). `expiresAt` defaults to
+   * now + authTokenTtlHours; a caller may pass a sooner ISO timestamp to bound the token to
+   * an externally-owned session window.
+   */
+  async issueToken(studentId: string, expiresAt?: string): Promise<AuthToken> {
     const now = this.clock.now()
+    const ttlExpiry = new Date(now.getTime() + this.config.authTokenTtlHours * 3_600_000).toISOString()
+    const effectiveExpiry =
+      expiresAt && expiresAt < ttlExpiry ? expiresAt : ttlExpiry
     const token = generateToken()
-    const expiresAt = new Date(
-      now.getTime() + this.config.authTokenTtlHours * 3_600_000,
-    ).toISOString()
-    const { error: insertError } = await this.db.from('auth_tokens').insert({
+    const { error } = await this.db.from('auth_tokens').insert({
       token_hash: hashToken(token),
-      student_id: row.id,
+      student_id: studentId,
       issued_at: now.toISOString(),
-      expires_at: expiresAt,
+      expires_at: effectiveExpiry,
     })
-    if (insertError) dbError('login token insert', insertError)
-    return { student: toStudent(row), auth: { token, expiresAt } }
+    if (error) dbError('issueToken insert', error)
+    return { token, expiresAt: effectiveExpiry }
   }
 
   async logout(token: string): Promise<void> {
@@ -366,6 +377,118 @@ export class AuthzService {
     const { error } = await this.db.from('usage_sessions').update({ ended_at: endedAt }).eq('id', active.id)
     if (error) dbError('endSession', error)
     return { ...active, endedAt }
+  }
+
+  // ── BabySteps app-launch handoff ──────────────────────────
+  // These support lib/platform/app-launch: a learner arriving from BabySteps (who already
+  // owns entitlement) is provisioned into this same authority — a real students row, a
+  // booking for today, and a usage_sessions row — so the /apps/chessmaster play gate
+  // (getActiveSession) is satisfied with no change to the gate itself.
+
+  /**
+   * Insert (or refresh the display name of) a student whose identity is asserted by
+   * BabySteps. `id` is BabySteps' stable learner_id; there is no usable password.
+   */
+  async upsertLaunchStudent(input: { id: string; displayName: string }): Promise<Student> {
+    const displayName = input.displayName.trim() || 'Learner'
+    const { data: existing, error: lookupError } = await this.db
+      .from('students')
+      .select('*')
+      .eq('id', input.id)
+      .maybeSingle<StudentRow>()
+    if (lookupError) dbError('upsertLaunchStudent lookup', lookupError)
+
+    if (existing) {
+      if (existing.display_name !== displayName) {
+        const { error } = await this.db
+          .from('students')
+          .update({ display_name: displayName })
+          .eq('id', input.id)
+        if (error) dbError('upsertLaunchStudent update', error)
+      }
+      return toStudent({ ...existing, display_name: displayName })
+    }
+
+    const row: StudentRow = {
+      id: input.id,
+      email: `launch+${input.id}@apps.babysteps.in`,
+      display_name: displayName,
+      password_hash: hashPassword(generateToken()), // unusable — launch learners never log in
+      created_at: this.clock.now().toISOString(),
+    }
+    const { error } = await this.db.from('students').insert(row)
+    if (error) dbError('upsertLaunchStudent insert', error)
+    return toStudent(row)
+  }
+
+  /**
+   * Idempotently ensure a booking exists for today for this student. Unlike bookSlot() this
+   * bypasses the advance-date rules — the slot is *today*, dispatched by BabySteps.
+   */
+  async ensureBookingForToday(studentId: string): Promise<Booking> {
+    const today = this.today()
+    const { data: existing, error: lookupError } = await this.db
+      .from('bookings')
+      .select('*')
+      .eq('student_id', studentId)
+      .eq('slot_date', today)
+      .maybeSingle<BookingRow>()
+    if (lookupError) dbError('ensureBookingForToday lookup', lookupError)
+    if (existing) return toBooking(existing)
+
+    const row: BookingRow = {
+      id: newId(),
+      student_id: studentId,
+      slot_date: today,
+      created_at: this.clock.now().toISOString(),
+    }
+    const { error } = await this.db.from('bookings').insert(row)
+    if (error) {
+      // A concurrent launch may have inserted the same (student, today) row first — the
+      // unique constraint makes that safe to treat as success.
+      const { data: raced } = await this.db
+        .from('bookings')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('slot_date', today)
+        .maybeSingle<BookingRow>()
+      if (raced) return toBooking(raced)
+      dbError('ensureBookingForToday insert', error)
+    }
+    return toBooking(row)
+  }
+
+  /**
+   * Start (or resume) a usage session for a BabySteps-launched learner. Like startSession()
+   * but: creates today's booking if missing, and does NOT enforce the per-day quota —
+   * BabySteps owns entitlement, so a launch is never refused here. `sessionExpiresAt` (from
+   * the exchange's centralSessionExpiresAt) bounds the window when it is sooner than the
+   * configured sessionMinutes.
+   */
+  async startLaunchSession(
+    studentId: string,
+    opts: { sessionExpiresAt?: string } = {},
+  ): Promise<{ session: UsageSession; resumed: boolean }> {
+    const active = await this.getActiveSession(studentId)
+    if (active) return { session: active, resumed: true }
+
+    const booking = await this.ensureBookingForToday(studentId)
+    const now = this.clock.now()
+    const localExpiry = new Date(now.getTime() + this.config.sessionMinutes * 60_000).toISOString()
+    const expiresAt =
+      opts.sessionExpiresAt && opts.sessionExpiresAt < localExpiry ? opts.sessionExpiresAt : localExpiry
+
+    const row: SessionRow = {
+      id: newId(),
+      student_id: studentId,
+      booking_id: booking.id,
+      started_at: now.toISOString(),
+      expires_at: expiresAt,
+      ended_at: null,
+    }
+    const { error } = await this.db.from('usage_sessions').insert(row)
+    if (error) dbError('startLaunchSession insert', error)
+    return { session: toSession(row), resumed: false }
   }
 
   /** Everything the account screen needs in one call. */
