@@ -6,6 +6,7 @@ conformance-report.md
 .next/
 next-env.d.ts
 .vercel
+tsconfig.tsbuildinfo
 
 # env
 .env
